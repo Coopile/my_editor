@@ -423,53 +423,227 @@ class Editor extends StatefulWidget {
 class _EditorState extends State<Editor> {
   VideoPlayerController? _vc;
   final List<Layer> _layers = [];
+  final List<AudioTrack> _audioTracks = [];
+  final List<List<Layer>> _undoStack = [];
+  final List<List<Layer>> _redoStack = [];
   int? _sel;
   int _videoFx = 0, _tab = 0;
-  bool _pivotMode = false;
+  bool _pivotMode = false, _exporting = false;
   double _vol = 1;
+  double _trimStart = 0, _trimEnd = 0;
+  double _videoFxStrength = 1, _videoFxSpeed = 1;
+  double _brightness = 0, _contrast = 1, _saturation = 1;
+  String? _videoPath;
+  Size _stageSize = const Size(360, 230);
 
   int get _ms => _vc?.value.position.inMilliseconds ?? 0;
   double get _t {
     final d = _vc?.value.duration.inMilliseconds ?? 0;
     return d == 0 ? 0 : _ms / d;
   }
+  double get _videoDuration {
+    final d = (_vc?.value.duration.inMilliseconds ?? 0) / 1000;
+    return d > 0 ? d : 1;
+  }
+  Duration _time(double seconds) =>
+      Duration(milliseconds: (seconds * 1000).round());
 
-  void _ed(Layer l, VoidCallback f) => setState(() {
-        f();
-        if (l.kfs.isNotEmpty) l.upsert(_ms);
-      });
+  List<Layer> _layerSnapshot() =>
+      _layers.map((layer) => layer.snapshot()).toList();
+
+  void _pushUndo() {
+    _undoStack.add(_layerSnapshot());
+    if (_undoStack.length > 40) _undoStack.removeAt(0);
+    _redoStack.clear();
+  }
+
+  void _undo() {
+    if (_undoStack.isEmpty) return;
+    _redoStack.add(_layerSnapshot());
+    final previous = _undoStack.removeLast();
+    setState(() {
+      _layers
+        ..clear()
+        ..addAll(previous.map((layer) => layer.snapshot()));
+      _sel = _layers.isEmpty ? null : (_sel ?? 0).clamp(0, _layers.length - 1);
+    });
+  }
+
+  void _redo() {
+    if (_redoStack.isEmpty) return;
+    _undoStack.add(_layerSnapshot());
+    final next = _redoStack.removeLast();
+    setState(() {
+      _layers
+        ..clear()
+        ..addAll(next.map((layer) => layer.snapshot()));
+      _sel = _layers.isEmpty ? null : (_sel ?? 0).clamp(0, _layers.length - 1);
+    });
+  }
+
+  void _ed(Layer l, VoidCallback f) {
+    _pushUndo();
+    setState(() {
+      f();
+      if (l.kfs.isNotEmpty) l.upsert(_ms);
+    });
+  }
+
+  Future<void> _pauseAudio() async {
+    for (final track in _audioTracks) {
+      await track.player.pause();
+    }
+  }
+
+  Future<void> _syncAudio() async {
+    final now = _ms / 1000;
+    for (final track in _audioTracks) {
+      final startMs = (track.start * _videoDuration * 1000).round();
+      final endMs = (track.end * _videoDuration * 1000).round();
+      if (now * 1000 >= startMs && now * 1000 < endMs) {
+        final offset = Duration(milliseconds: (_ms - startMs).clamp(0, 1 << 30));
+        if (track.player.state != PlayerState.playing) {
+          await track.player.play(
+            DeviceFileSource(track.path),
+            volume: track.volume,
+            position: offset,
+          );
+        } else {
+          await track.player.setVolume(track.volume);
+        }
+      } else if (track.player.state == PlayerState.playing) {
+        await track.player.pause();
+      }
+    }
+  }
+
+  Future<void> _togglePlayback() async {
+    final controller = _vc;
+    if (controller == null) return;
+    if (controller.value.isPlaying) {
+      await controller.pause();
+      await _pauseAudio();
+    } else {
+      if (controller.value.position >= _time(_trimEnd)) {
+        await controller.seekTo(_time(_trimStart));
+      }
+      await controller.setVolume(_vol);
+      await controller.play();
+      await _syncAudio();
+    }
+  }
 
   Future<void> _pickVideo() async {
-    final f = await ImagePicker().pickVideo(source: ImageSource.gallery);
-    if (f == null) return;
+    final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
+    if (picked == null) return;
     await _vc?.dispose();
-    final c = VideoPlayerController.file(File(f.path));
-    await c.initialize();
-    c.setLooping(true);
-    c.addListener(() {
-      for (final l in _layers) { l.apply(c.value.position.inMilliseconds); }
-      setState(() {});
+    _videoPath = picked.path;
+    final controller = VideoPlayerController.file(File(picked.path));
+    await controller.initialize();
+    await controller.setLooping(false);
+    _trimStart = 0;
+    _trimEnd = controller.value.duration.inMilliseconds / 1000;
+    controller.addListener(() {
+      final position = controller.value.position;
+      for (final layer in _layers) {
+        layer.apply(position.inMilliseconds);
+      }
+      if (controller.value.isPlaying &&
+          _trimEnd > _trimStart &&
+          position >= _time(_trimEnd)) {
+        controller.pause();
+        controller.seekTo(_time(_trimStart));
+        _pauseAudio();
+      }
+      if (mounted) setState(() {});
     });
-    setState(() => _vc = c);
+    if (!mounted) {
+      await controller.dispose();
+      return;
+    }
+    setState(() => _vc = controller);
+    await controller.setVolume(_vol);
+  }
+
+  Future<void> _addPhoto() async {
+    final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
+    if (picked == null) return;
+    _add(Layer.image(picked.path, const Offset(52, 52)));
+  }
+
+  Future<void> _addAudio() async {
+    final picked = await FilePicker.pickFile(type: FileType.audio);
+    if (picked == null || picked.path == null) return;
+    final track = AudioTrack(path: picked.path!, title: picked.name);
+    await track.player.setSourceDeviceFile(track.path);
+    if (!mounted) {
+      await track.player.dispose();
+      return;
+    }
+    setState(() => _audioTracks.add(track));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Added audio: \${track.title}')),
+    );
   }
 
   Future<void> _addText() async {
-    final ctrl = TextEditingController(text: 'Hello');
+    final ctrl = TextEditingController(text: 'Your caption');
     final t = await showDialog<String>(
       context: context,
       builder: (_) => AlertDialog(
-        title: const Text('Add text'),
+        backgroundColor: const Color(0xFF171A2A),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text('Add a caption'),
         content: TextField(controller: ctrl, autofocus: true),
-        actions: [TextButton(onPressed: () => Navigator.pop(context, ctrl.text), child: const Text('Add'))],
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, ctrl.text.trim()),
+            child: const Text('Add caption'),
+          ),
+        ],
       ),
     );
-    if (t != null && t.isNotEmpty) _add(Layer.text(t, const Offset(60, 60)));
+    if (t != null && t.isNotEmpty) {
+      _add(Layer.text(t, const Offset(60, 60)));
+    }
   }
 
-  void _add(Layer l) => setState(() {
-        _layers.add(l);
-        _sel = _layers.length - 1;
-      });
+  void _add(Layer layer) {
+    _pushUndo();
+    setState(() {
+      _layers.add(layer);
+      _sel = _layers.length - 1;
+    });
+  }
+
+  void _deleteSelected() {
+    final index = _sel;
+    if (index == null || index < 0 || index >= _layers.length) return;
+    _pushUndo();
+    setState(() {
+      _layers.removeAt(index);
+      _sel = _layers.isEmpty ? null : math.min(index, _layers.length - 1);
+      _pivotMode = false;
+    });
+  }
+
+  void _deleteAudio(AudioTrack track) {
+    setState(() => _audioTracks.remove(track));
+    track.player.dispose();
+  }
+
+  List<double> _adjustmentMatrix() {
+    final s = _saturation;
+    final c = _contrast;
+    final b = _brightness * 255 + 128 * (1 - c);
+    return [
+      (.213 + .787 * s) * c, (.715 - .715 * s) * c, (.072 - .072 * s) * c, 0, b,
+      (.213 - .213 * s) * c, (.715 + .285 * s) * c, (.072 - .072 * s) * c, 0, b,
+      (.213 - .213 * s) * c, (.715 - .715 * s) * c, (.072 + .928 * s) * c, 0, b,
+      0, 0, 0, 1, 0,
+    ];
+  }
 
   String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
 
