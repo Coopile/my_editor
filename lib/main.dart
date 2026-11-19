@@ -675,6 +675,17 @@ class _EditorState extends State<Editor> {
               ),
         ]),
       );
+    } else if (l.isImage && l.imagePath != null) {
+      child = ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Image.file(
+          File(l.imagePath!),
+          width: 190,
+          height: 190,
+          fit: BoxFit.contain,
+          errorBuilder: (_, __, ___) => const Icon(Icons.broken_image, color: Colors.white70, size: 56),
+        ),
+      );
     } else {
       child = Padding(
         padding: const EdgeInsets.all(6),
@@ -687,7 +698,13 @@ class _EditorState extends State<Editor> {
             )),
       );
     }
-    child = applyFx(l.fx, child);
+    child = applyFx(
+      l.fx,
+      child,
+      strength: l.fxStrength,
+      speed: l.fxSpeed,
+      time: _ms / 1000,
+    );
     if (sel && _pivotMode) {
       child = Stack(children: [
         child,
@@ -736,22 +753,50 @@ class _EditorState extends State<Editor> {
 
   Widget _stage() {
     final vc = _vc;
-    return GestureDetector(
-      onTap: () => setState(() => _sel = null),
-      child: Container(
-        color: Colors.black,
-        child: ClipRect(
-          child: Stack(fit: StackFit.expand, children: [
-            if (vc != null)
-              Center(child: AspectRatio(aspectRatio: vc.value.aspectRatio,
-                  child: applyFx(_videoFx, VideoPlayer(vc))))
-            else
-              const Center(child: Text('Tap Add to import a video', style: TextStyle(color: Colors.white70))),
-            for (int i = 0; i < _layers.length; i++) _layerView(i),
-          ]),
+    return LayoutBuilder(builder: (context, constraints) {
+      _stageSize = Size(constraints.maxWidth, constraints.maxHeight);
+      return GestureDetector(
+        onTap: () => setState(() => _sel = null),
+        child: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF090B18), Color(0xFF101528), Color(0xFF15112C)],
+            ),
+          ),
+          child: ClipRect(
+            child: Stack(fit: StackFit.expand, children: [
+              if (vc != null)
+                Center(
+                  child: AspectRatio(
+                    aspectRatio: vc.value.aspectRatio,
+                    child: applyFx(
+                      _videoFx,
+                      ColorFiltered(
+                        colorFilter: ColorFilter.matrix(_adjustmentMatrix()),
+                        child: VideoPlayer(vc),
+                      ),
+                      strength: _videoFxStrength,
+                      speed: _videoFxSpeed,
+                      time: _ms / 1000,
+                    ),
+                  ),
+                )
+              else
+                const Center(
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.movie_creation_outlined, size: 54, color: Color(0xFF8B5CF6)),
+                    SizedBox(height: 12),
+                    Text('Import a clip to start your edit', style: TextStyle(color: Colors.white70)),
+                  ]),
+                ),
+              for (int i = 0; i < _layers.length; i++) _layerView(i),
+            ]),
+          ),
         ),
-      ),
-    );
+      );
+    });
   }
 
   Widget _controls() {
