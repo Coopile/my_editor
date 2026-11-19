@@ -712,6 +712,26 @@ class _EditorState extends State<Editor> {
     });
   }
 
+  void _splitSelected() {
+    final index = _sel;
+    if (index == null || index < 0 || index >= _layers.length) return;
+    final layer = _layers[index];
+    final splitAt = (_ms / 1000 / _videoDuration).clamp(0.0, 1.0).toDouble();
+    if (splitAt <= layer.start + .01 || splitAt >= layer.end - .01) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Move the playhead inside the selected clip to split it.')),
+      );
+      return;
+    }
+    _pushUndo();
+    final right = layer.snapshot()..start = splitAt;
+    setState(() {
+      layer.end = splitAt;
+      _layers.insert(index + 1, right);
+      _sel = index + 1;
+    });
+  }
+
   void _deleteSelected() {
     final index = _sel;
     if (index == null || index < 0 || index >= _layers.length) return;
@@ -771,6 +791,7 @@ class _EditorState extends State<Editor> {
     final name = fxLibrary[_videoFx].$1;
     final amount = _videoFxStrength.clamp(0.0, 2.0);
     final speed = _videoFxSpeed.clamp(.1, 3.0).toDouble();
+    if (name == 'None' || name == 'Bend') return '';
     switch (name) {
       case 'Shake':
         final drift = (.025 * amount).toStringAsFixed(4);
@@ -1270,7 +1291,11 @@ class _EditorState extends State<Editor> {
         child: Slider(
           value: pos.inMilliseconds.clamp(0, dur.inMilliseconds).toDouble(),
           max: dur.inMilliseconds > 0 ? dur.inMilliseconds.toDouble() : 1,
-          onChanged: vc == null ? null : (v) => vc.seekTo(Duration(milliseconds: v.toInt())),
+          onChanged: vc == null ? null : (v) {
+            _pauseAudio();
+            _lastAudioSyncBucket = -1;
+            vc.seekTo(Duration(milliseconds: v.toInt()));
+          },
         ),
       ),
       Padding(
@@ -1438,6 +1463,12 @@ class _EditorState extends State<Editor> {
           ),
           IconButton(
             visualDensity: VisualDensity.compact,
+            tooltip: 'Split selected clip at playhead',
+            onPressed: selected == null ? null : _splitSelected,
+            icon: const Icon(Icons.content_cut_rounded, size: 17),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
             tooltip: 'Delete selected layer',
             onPressed: selected == null ? null : _deleteSelected,
             icon: const Icon(Icons.delete_outline_rounded, size: 18),
@@ -1452,7 +1483,11 @@ class _EditorState extends State<Editor> {
                 child: Slider(
                   value: _ms.clamp(0, _vc!.value.duration.inMilliseconds).toDouble(),
                   max: math.max(1, _vc!.value.duration.inMilliseconds).toDouble(),
-                  onChanged: (v) => _vc?.seekTo(Duration(milliseconds: v.round())),
+                  onChanged: (v) {
+                    _pauseAudio();
+                    _lastAudioSyncBucket = -1;
+                    _vc?.seekTo(Duration(milliseconds: v.round()));
+                  },
                 ),
               ),
             ),
