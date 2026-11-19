@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:cross_file/cross_file.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_full/ffprobe_kit.dart';
@@ -106,7 +108,7 @@ Widget applyFx(
   double time = 0,
 }) {
   final n = fxLibrary[i].$1;
-  final amount = strength.clamp(0.0, 2.0);
+  final amount = strength.clamp(0.0, 2.0).toDouble();
   if (n == 'None' || n == 'Bend') return w;
 
   // Motion and lens effects are rendered as actual transforms/layers in preview.
@@ -169,7 +171,7 @@ Widget applyFx(
             child: ColoredBox(
               color: Colors.white.withOpacity(
                 (math.sin(time * 18 * speed).clamp(0.0, 1.0) * .38 * amount)
-                    .clamp(0.0, .65),
+                    .clamp(0.0, .65).toDouble(),
               ),
             ),
           ),
@@ -192,7 +194,7 @@ Widget applyFx(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
                   radius: .72,
-                  colors: [Colors.transparent, Colors.black.withOpacity(.82 * amount.clamp(0.0, 1.0))],
+                  colors: [Colors.transparent, Colors.black.withOpacity(.82 * amount.clamp(0.0, 1.0).toDouble())],
                   stops: const [.42, 1],
                 ),
               ),
@@ -208,7 +210,7 @@ Widget applyFx(
     case 'Pixelate':
       return ImageFiltered(
         imageFilter: ui.ImageFilter.matrix(
-          Matrix4.identity()..scale(0.16 + (1 - amount.clamp(0.0, 1.0)) * .12),
+          Matrix4.identity()..scale(0.16 + (1 - amount.clamp(0.0, 1.0).toDouble()) * .12),
         ),
         child: w,
       );
@@ -430,6 +432,7 @@ class _EditorState extends State<Editor> {
   int _videoFx = 0, _tab = 0;
   bool _pivotMode = false, _exporting = false;
   double _vol = 1;
+  int _lastAudioSyncBucket = -1;
   double _trimStart = 0, _trimEnd = 0;
   double _videoFxStrength = 1, _videoFxSpeed = 1;
   double _brightness = 0, _contrast = 1, _saturation = 1;
@@ -477,7 +480,7 @@ class _EditorState extends State<Editor> {
       _layers
         ..clear()
         ..addAll(next.map((layer) => layer.snapshot()));
-      _sel = _layers.isEmpty ? null : (_sel ?? 0).clamp(0, _layers.length - 1);
+      _sel = _layers.isEmpty ? null : (_sel ?? 0).clamp(0, _layers.length - 1).toInt();
     });
   }
 
@@ -528,6 +531,7 @@ class _EditorState extends State<Editor> {
         await controller.seekTo(_time(_trimStart));
       }
       await controller.setVolume(_vol);
+      _lastAudioSyncBucket = -1;
       await controller.play();
       await _syncAudio();
     }
@@ -545,6 +549,13 @@ class _EditorState extends State<Editor> {
     _trimEnd = controller.value.duration.inMilliseconds / 1000;
     controller.addListener(() {
       final position = controller.value.position;
+      if (controller.value.isPlaying) {
+        final bucket = position.inMilliseconds ~/ 200;
+        if (bucket != _lastAudioSyncBucket) {
+          _lastAudioSyncBucket = bucket;
+          _syncAudio();
+        }
+      }
       for (final layer in _layers) {
         layer.apply(position.inMilliseconds);
       }
@@ -586,6 +597,86 @@ class _EditorState extends State<Editor> {
     );
   }
 
+  Uint8List _makeSfxWave(String kind) {
+    final sampleRate = 22050;
+    final seconds = switch (kind) {
+      'Click' => .075,
+      'Pop' => .24,
+      'Whoosh' => .8,
+      _ => 1.0,
+    };
+    final sampleCount = (sampleRate * seconds).round();
+    final bytes = Uint8List(44 + sampleCount * 2);
+    final data = ByteData.sublistView(bytes);
+    void writeTag(int offset, String tag) {
+      for (int i = 0; i < tag.length; i++) {
+        data.setUint8(offset + i, tag.codeUnitAt(i));
+      }
+    }
+    writeTag(0, 'RIFF');
+    data.setUint32(4, 36 + sampleCount * 2, Endian.little);
+    writeTag(8, 'WAVE');
+    writeTag(12, 'fmt ');
+    data.setUint32(16, 16, Endian.little);
+    data.setUint16(20, 1, Endian.little);
+    data.setUint16(22, 1, Endian.little);
+    data.setUint32(24, sampleRate, Endian.little);
+    data.setUint32(28, sampleRate * 2, Endian.little);
+    data.setUint16(32, 2, Endian.little);
+    data.setUint16(34, 16, Endian.little);
+    writeTag(36, 'data');
+    data.setUint32(40, sampleCount * 2, Endian.little);
+
+    final random = math.Random(7919 + kind.hashCode);
+    for (int i = 0; i < sampleCount; i++) {
+      final t = i / sampleRate;
+      final progress = t / seconds;
+      final envelope = switch (kind) {
+        'Click' => math.pow(1 - progress, 4).toDouble(),
+        'Pop' => math.pow(1 - progress, 3).toDouble(),
+        'Whoosh' => math.sin(math.pi * progress).clamp(0.0, 1.0).toDouble(),
+        _ => math.pow(progress, .6).toDouble() * (1 - progress),
+      };
+      final frequency = switch (kind) {
+        'Click' => 1800 - 900 * progress,
+        'Pop' => 360 - 230 * progress,
+        'Whoosh' => 130 + 520 * progress,
+        _ => 160 + 1100 * progress,
+      };
+      final tone = math.sin(2 * math.pi * frequency * t);
+      final noise = random.nextDouble() * 2 - 1;
+      final sample = kind == 'Whoosh'
+          ? (tone * .3 + noise * .7) * envelope * .52
+          : kind == 'Click'
+              ? tone * envelope * .75
+              : (tone * .78 + noise * .12) * envelope * .68;
+      data.setInt16(
+        44 + i * 2,
+        (sample.clamp(-1.0, 1.0) * 32767).round(),
+        Endian.little,
+      );
+    }
+    return bytes;
+  }
+
+  Future<void> _addSoundEffect(String kind) async {
+    final directory = await getTemporaryDirectory();
+    final safeName = kind.toLowerCase().replaceAll(' ', '_');
+    final path = '\${directory.path}/editshift_\${safeName}_\${DateTime.now().microsecondsSinceEpoch}.wav';
+    final file = File(path);
+    await file.writeAsBytes(_makeSfxWave(kind), flush: true);
+    final track = AudioTrack(path: path, title: 'EditShift $kind');
+    await track.player.setSourceDeviceFile(path);
+    if (!mounted) {
+      await track.player.dispose();
+      return;
+    }
+    setState(() => _audioTracks.add(track));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('$kind sound effect added to the timeline')),
+    );
+  }
+
   Future<void> _addText() async {
     final ctrl = TextEditingController(text: 'Your caption');
     final t = await showDialog<String>(
@@ -623,7 +714,7 @@ class _EditorState extends State<Editor> {
     _pushUndo();
     setState(() {
       _layers.removeAt(index);
-      _sel = _layers.isEmpty ? null : math.min(index, _layers.length - 1);
+      _sel = _layers.isEmpty ? null : math.min(index, _layers.length - 1).toInt();
       _pivotMode = false;
     });
   }
@@ -655,12 +746,13 @@ class _EditorState extends State<Editor> {
       .replaceAll(',', r'\,')
       .replaceAll('%', r'\%')
       .replaceAll('[', r'\[')
-      .replaceAll(']', r'\]');
+      .replaceAll(']', r'\]')
+      .replaceAll('\n', r'\n');
 
   String _exportEffectFilter() {
     final name = fxLibrary[_videoFx].$1;
     final amount = _videoFxStrength.clamp(0.0, 2.0);
-    final speed = _videoFxSpeed.clamp(.1, 3.0);
+    final speed = _videoFxSpeed.clamp(.1, 3.0).toDouble();
     switch (name) {
       case 'Shake':
         final drift = (.025 * amount).toStringAsFixed(4);
@@ -953,8 +1045,8 @@ class _EditorState extends State<Editor> {
             behavior: HitTestBehavior.translucent,
             onPanUpdate: (d) => setState(() {
               l.pivot = Offset(
-                (d.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0),
-                (d.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0),
+                (d.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0).toDouble(),
+                (d.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0).toDouble(),
               );
             }),
             child: Align(
