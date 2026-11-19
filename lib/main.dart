@@ -1047,7 +1047,7 @@ class _EditorState extends State<Editor> {
       IconButton(
         iconSize: 36,
         icon: Icon(vc?.value.isPlaying == true ? Icons.pause_circle : Icons.play_circle),
-        onPressed: vc == null ? null : () => vc.value.isPlaying ? vc.pause() : vc.play(),
+        onPressed: vc == null ? null : _togglePlayback,
       ),
       Expanded(
         child: Slider(
@@ -1085,6 +1085,240 @@ class _EditorState extends State<Editor> {
         SizedBox(width: 72, child: Text(t, style: const TextStyle(fontSize: 13))),
         Expanded(child: Slider(value: v.clamp(mn, mx), min: mn, max: mx, onChanged: (x) => _ed(l, () => f(x)))),
       ]);
+
+  Widget _globalS(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged, {
+    String suffix = '',
+  }) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(children: [
+          SizedBox(width: 82, child: Text(label, style: const TextStyle(fontSize: 12))),
+          Expanded(
+            child: Slider(
+              value: value.clamp(min, max).toDouble(),
+              min: min,
+              max: max,
+              onChanged: onChanged,
+            ),
+          ),
+          SizedBox(
+            width: 38,
+            child: Text(
+              '\${value.toStringAsFixed(1)}$suffix',
+              textAlign: TextAlign.end,
+              style: const TextStyle(color: Colors.white54, fontSize: 10),
+            ),
+          ),
+        ]),
+      );
+
+  Widget _timelineTrack({
+    required String title,
+    required IconData icon,
+    required Color accent,
+    required RangeValues values,
+    required double max,
+    required ValueChanged<RangeValues> onChanged,
+    bool selected = false,
+    VoidCallback? onTap,
+    VoidCallback? onDelete,
+  }) {
+    final low = values.start.clamp(0.0, max).toDouble();
+    final high = values.end.clamp(low, max).toDouble();
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.fromLTRB(10, 8, 8, 2),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF282044) : const Color(0xFF171A2B),
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(
+            color: selected ? accent.withOpacity(.85) : Colors.white.withOpacity(.055),
+            width: selected ? 1.3 : 1,
+          ),
+        ),
+        child: Column(children: [
+          Row(children: [
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                gradient: LinearGradient(colors: [accent, accent.withOpacity(.35)]),
+              ),
+              child: Icon(icon, size: 15, color: Colors.white),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            ),
+            if (selected)
+              const Text('SELECTED', style: TextStyle(color: Color(0xFF43D9D2), fontSize: 8, fontWeight: FontWeight.w800)),
+            if (onDelete != null)
+              IconButton(
+                visualDensity: VisualDensity.compact,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
+                onPressed: onDelete,
+                icon: const Icon(Icons.close_rounded, size: 16, color: Colors.white54),
+              ),
+          ]),
+          SizedBox(
+            height: 25,
+            child: RangeSlider(
+              values: RangeValues(low, high),
+              min: 0,
+              max: max,
+              onChanged: onChanged,
+            ),
+          ),
+        ]),
+      ),
+    );
+  }
+
+  Widget _timeline() {
+    final duration = _videoDuration;
+    final selected = _sel != null && _sel! < _layers.length ? _sel! : null;
+    return Container(
+      height: 184,
+      margin: const EdgeInsets.fromLTRB(8, 5, 8, 5),
+      padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(22),
+        gradient: const LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF1C2037), Color(0xFF101321), Color(0xFF211633)],
+        ),
+        border: Border.all(color: Colors.white.withOpacity(.08)),
+        boxShadow: [BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(.08), blurRadius: 18)],
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.movie_filter_rounded, color: Color(0xFF43D9D2), size: 17),
+          const SizedBox(width: 7),
+          const Text('TIMELINE', style: TextStyle(fontSize: 10, letterSpacing: 1.7, fontWeight: FontWeight.w900)),
+          const Spacer(),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Undo',
+            onPressed: _undoStack.isEmpty ? null : _undo,
+            icon: const Icon(Icons.undo_rounded, size: 18),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Redo',
+            onPressed: _redoStack.isEmpty ? null : _redo,
+            icon: const Icon(Icons.redo_rounded, size: 18),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Delete selected layer',
+            onPressed: selected == null ? null : _deleteSelected,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+          ),
+        ]),
+        if (_vc != null)
+          Row(children: [
+            Text(_fmt(_vc!.value.position), style: const TextStyle(fontSize: 9, color: Color(0xFF43D9D2))),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(trackHeight: 2, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5)),
+                child: Slider(
+                  value: _ms.clamp(0, _vc!.value.duration.inMilliseconds).toDouble(),
+                  max: math.max(1, _vc!.value.duration.inMilliseconds).toDouble(),
+                  onChanged: (v) => _vc?.seekTo(Duration(milliseconds: v.round())),
+                ),
+              ),
+            ),
+            Text(_fmt(_vc!.value.duration), style: const TextStyle(fontSize: 9, color: Colors.white54)),
+          ]),
+        Expanded(
+          child: ListView(
+            children: [
+              if (_vc != null)
+                _timelineTrack(
+                  title: 'Main video · trim clip',
+                  icon: Icons.videocam_rounded,
+                  accent: const Color(0xFF43D9D2),
+                  values: RangeValues(
+                    _trimStart.clamp(0.0, duration).toDouble(),
+                    _trimEnd.clamp(_trimStart, duration).toDouble(),
+                  ),
+                  max: duration,
+                  onChanged: (range) {
+                    setState(() {
+                      _trimStart = range.start;
+                      _trimEnd = range.end;
+                    });
+                    if (_vc!.value.position < _time(_trimStart) ||
+                        _vc!.value.position > _time(_trimEnd)) {
+                      _vc!.seekTo(_time(_trimStart));
+                    }
+                  },
+                ),
+              for (int i = 0; i < _layers.length; i++)
+                _timelineTrack(
+                  title: _layers[i].isMesh
+                      ? 'Mesh overlay'
+                      : _layers[i].isImage
+                          ? 'Photo overlay'
+                          : _layers[i].text,
+                  icon: _layers[i].isMesh
+                      ? Icons.grid_on
+                      : _layers[i].isImage
+                          ? Icons.image_rounded
+                          : Icons.subtitles_rounded,
+                  accent: _layers[i].isImage
+                      ? const Color(0xFFEC8BCB)
+                      : _layers[i].isMesh
+                          ? const Color(0xFF8B5CF6)
+                          : const Color(0xFFFFB45C),
+                  values: RangeValues(_layers[i].start, _layers[i].end),
+                  max: 1,
+                  selected: selected == i,
+                  onTap: () => setState(() => _sel = i),
+                  onChanged: (range) => _ed(_layers[i], () {
+                    _layers[i].start = range.start;
+                    _layers[i].end = range.end;
+                  }),
+                ),
+              for (final track in _audioTracks)
+                _timelineTrack(
+                  title: 'Audio · \${track.title}',
+                  icon: Icons.graphic_eq_rounded,
+                  accent: const Color(0xFF62C9FF),
+                  values: RangeValues(track.start, track.end),
+                  max: 1,
+                  onChanged: (range) => setState(() {
+                    track.start = range.start;
+                    track.end = range.end;
+                  }),
+                  onTap: () => setState(() => _tab = tabs.indexWhere((tab) => tab.$1 == 'Audio')),
+                  onDelete: () => _deleteAudio(track),
+                ),
+              if (_vc == null && _layers.isEmpty && _audioTracks.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                    child: Text('Your clips, photos, captions and audio will appear here',
+                        style: TextStyle(fontSize: 10, color: Colors.white38)),
+                  ),
+                ),
+            ],
+          ),
+        ),
+      ]),
+    );
+  }
 
   Widget _tabBar() => SizedBox(
         height: 62,
