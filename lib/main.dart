@@ -1,8 +1,15 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
+import 'package:audioplayers/audioplayers.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_full/ffprobe_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_full/return_code.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'home_screen.dart';
 
@@ -72,6 +79,16 @@ const fxLibrary = [
   ('Color Pop', Icons.auto_awesome),
   ('Chromatic', Icons.auto_awesome),
   ('Bend', Icons.auto_awesome),
+  ('Shake', Icons.vibration),
+  ('Zoom Pulse', Icons.zoom_in),
+  ('Spin', Icons.rotate_right),
+  ('Glitch', Icons.broken_image),
+  ('RGB Split', Icons.filter_b_and_w),
+  ('Flash', Icons.flash_on),
+  ('Glow', Icons.wb_sunny),
+  ('Vignette', Icons.lens_blur),
+  ('Film Grain', Icons.grain),
+  ('Pixelate', Icons.grid_on),
 ];
 const _m = {
   'Gray': [0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0, 0, 0, 1, 0],
@@ -81,13 +98,130 @@ const _m = {
   'Contrast': [1.5, 0, 0, 0, -64, 0, 1.5, 0, 0, -64, 0, 0, 1.5, 0, -64, 0, 0, 0, 1, 0],
 };
 
-Widget applyFx(int i, Widget w) {
+Widget applyFx(
+  int i,
+  Widget w, {
+  double strength = 1,
+  double speed = 1,
+  double time = 0,
+}) {
   final n = fxLibrary[i].$1;
+  final amount = strength.clamp(0.0, 2.0);
   if (n == 'None' || n == 'Bend') return w;
+
+  // Motion and lens effects are rendered as actual transforms/layers in preview.
+  switch (n) {
+    case 'Shake':
+      return Transform.translate(
+        offset: Offset(
+          math.sin(time * 32 * speed) * 10 * amount,
+          math.cos(time * 27 * speed) * 7 * amount,
+        ),
+        child: Transform.rotate(
+          angle: math.sin(time * 23 * speed) * .018 * amount,
+          child: w,
+        ),
+      );
+    case 'Zoom Pulse':
+      return Transform.scale(
+        scale: 1 + math.sin(time * 6 * speed) * .055 * amount,
+        child: w,
+      );
+    case 'Spin':
+      return Transform.rotate(
+        angle: math.sin(time * 2.4 * speed) * .18 * amount,
+        child: w,
+      );
+    case 'Glitch':
+    case 'RGB Split':
+      return Stack(clipBehavior: Clip.none, children: [
+        Transform.translate(
+          offset: Offset(math.sin(time * 42 * speed) * 5 * amount, 0),
+          child: ColorFiltered(
+            colorFilter: const ColorFilter.matrix([
+              1, 0, 0, 0, 0,
+              0, 0, 0, 0, 0,
+              0, 0, 0, 0, 0,
+              0, 0, 0, .55, 0,
+            ]),
+            child: w,
+          ),
+        ),
+        Transform.translate(
+          offset: Offset(-math.sin(time * 37 * speed) * 5 * amount, 0),
+          child: ColorFiltered(
+            colorFilter: const ColorFilter.matrix([
+              0, 0, 0, 0, 0,
+              0, 0, 0, 0, 0,
+              0, 0, 1, 0, 0,
+              0, 0, 0, .42, 0,
+            ]),
+            child: w,
+          ),
+        ),
+        w,
+      ]);
+    case 'Flash':
+      return Stack(children: [
+        w,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: ColoredBox(
+              color: Colors.white.withOpacity(
+                (math.sin(time * 18 * speed).clamp(0.0, 1.0) * .38 * amount)
+                    .clamp(0.0, .65),
+              ),
+            ),
+          ),
+        ),
+      ]);
+    case 'Glow':
+      return Stack(children: [
+        ImageFiltered(
+          imageFilter: ui.ImageFilter.blur(sigmaX: 12 * amount, sigmaY: 12 * amount),
+          child: Opacity(opacity: .42, child: w),
+        ),
+        w,
+      ]);
+    case 'Vignette':
+      return Stack(children: [
+        w,
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: RadialGradient(
+                  radius: .72,
+                  colors: [Colors.transparent, Colors.black.withOpacity(.82 * amount.clamp(0.0, 1.0))],
+                  stops: const [.42, 1],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ]);
+    case 'Film Grain':
+      return CustomPaint(
+        foregroundPainter: _GrainPainter(time: time, strength: amount),
+        child: w,
+      );
+    case 'Pixelate':
+      return ImageFiltered(
+        imageFilter: ui.ImageFilter.matrix(
+          Matrix4.identity()..scale(0.16 + (1 - amount.clamp(0.0, 1.0)) * .12),
+        ),
+        child: w,
+      );
+  }
+
   if (n.toLowerCase().contains('blur') || n == 'Soft Focus') {
     final sigma = n == 'Motion Blur' ? 7.0 : n == 'Gaussian Blur' ? 5.0 : 3.0;
-    return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: w);
+    return ImageFiltered(
+      imageFilter: ui.ImageFilter.blur(sigmaX: sigma * amount, sigmaY: sigma * amount),
+      child: w,
+    );
   }
+
   final key = switch (n) {
     'Grayscale' || 'Mono' || 'Noir' => 'Gray',
     'Vintage' || 'Sepia' || 'Warm Film' || 'Golden Hour' || 'Polaroid' => 'Sepia',
@@ -96,8 +230,34 @@ Widget applyFx(int i, Widget w) {
     'High Contrast' || 'Deep Contrast' => 'Contrast',
     _ => '',
   };
-  final matrix = key.isNotEmpty ? _m[key]!.map((e) => e.toDouble()).toList() : _presetMatrix(i);
+  final matrix = key.isNotEmpty
+      ? _m[key]!.map((e) => e.toDouble()).toList()
+      : _presetMatrix(i);
   return ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: w);
+}
+
+class _GrainPainter extends CustomPainter {
+  final double time;
+  final double strength;
+  _GrainPainter({required this.time, required this.strength});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final random = math.Random(time.floor() + 17);
+    final paint = Paint()..strokeWidth = 1;
+    final count = (size.width * size.height / 180 * strength).round().clamp(0, 2200);
+    for (int i = 0; i < count; i++) {
+      paint.color = (i.isEven ? Colors.white : Colors.black)
+          .withOpacity(.12 + random.nextDouble() * .2);
+      final x = random.nextDouble() * size.width;
+      final y = random.nextDouble() * size.height;
+      canvas.drawPoints(ui.PointMode.points, [Offset(x, y)], paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GrainPainter old) =>
+      old.time.floor() != time.floor() || old.strength != strength;
 }
 
 List<double> _presetMatrix(int index) {
@@ -129,22 +289,55 @@ class KF {
 
 class Layer {
   final bool isMesh;
+  final bool isImage;
+  String? imagePath;
   String text;
   Offset pos;
   double scale = 1, rot = 0, opacity = 1, fontSize = 30, start = 0, end = 1, bend = 0;
+  double fxStrength = 1, fxSpeed = 1;
   Offset pivot = const Offset(.5, .5);
   int fx = 0;
   Color color = Colors.white;
   bool bold = true, italic = false, flipX = false, flipY = false, shadow = false, hidden = false;
   List<Offset> mesh = defaultMesh();
   List<KF> kfs = [];
-  Layer.text(this.text, this.pos) : isMesh = false;
-  Layer.mesh(this.pos) : isMesh = true, text = 'Mesh';
 
-  Layer copy() => (isMesh ? Layer.mesh(pos + const Offset(20, 20)) : Layer.text(text, pos + const Offset(20, 20)))
-    ..scale = scale ..rot = rot ..opacity = opacity ..fontSize = fontSize ..start = start ..end = end ..bend = bend
-    ..pivot = pivot ..fx = fx ..color = color ..bold = bold ..italic = italic
-    ..flipX = flipX ..flipY = flipY ..shadow = shadow ..mesh = List.of(mesh);
+  Layer.text(this.text, this.pos) : isMesh = false, isImage = false;
+  Layer.mesh(this.pos) : isMesh = true, isImage = false, text = 'Mesh';
+  Layer.image(this.imagePath, this.pos) : isMesh = false, isImage = true, text = 'Photo';
+
+  Layer _copyAt(Offset position) {
+    final clone = isMesh
+        ? Layer.mesh(position)
+        : isImage
+            ? Layer.image(imagePath, position)
+            : Layer.text(text, position);
+    clone
+      ..scale = scale
+      ..rot = rot
+      ..opacity = opacity
+      ..fontSize = fontSize
+      ..start = start
+      ..end = end
+      ..bend = bend
+      ..fxStrength = fxStrength
+      ..fxSpeed = fxSpeed
+      ..pivot = pivot
+      ..fx = fx
+      ..color = color
+      ..bold = bold
+      ..italic = italic
+      ..flipX = flipX
+      ..flipY = flipY
+      ..shadow = shadow
+      ..hidden = hidden
+      ..mesh = List.of(mesh)
+      ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
+    return clone;
+  }
+
+  Layer copy() => _copyAt(pos + const Offset(20, 20));
+  Layer snapshot() => _copyAt(pos);
 
   void upsert(int ms) {
     kfs.removeWhere((k) => (k.t - ms).abs() < 60);
@@ -155,11 +348,17 @@ class Layer {
   void apply(int ms) {
     if (kfs.isEmpty) return;
     var a = kfs.first, b = kfs.last;
-    if (ms <= a.t) { b = a; }
-    else if (ms >= b.t) { a = b; }
-    else {
+    if (ms <= a.t) {
+      b = a;
+    } else if (ms >= b.t) {
+      a = b;
+    } else {
       for (int i = 0; i < kfs.length - 1; i++) {
-        if (ms >= kfs[i].t && ms <= kfs[i + 1].t) { a = kfs[i]; b = kfs[i + 1]; break; }
+        if (ms >= kfs[i].t && ms <= kfs[i + 1].t) {
+          a = kfs[i];
+          b = kfs[i + 1];
+          break;
+        }
       }
     }
     final f = a.t == b.t ? 0.0 : (ms - a.t) / (b.t - a.t);
@@ -168,6 +367,17 @@ class Layer {
     rot = ui.lerpDouble(a.rot, b.rot, f)!;
     opacity = ui.lerpDouble(a.opacity, b.opacity, f)!;
   }
+}
+
+class AudioTrack {
+  final String path;
+  final String title;
+  final AudioPlayer player;
+  double volume;
+  double start = 0;
+  double end = 1;
+  AudioTrack({required this.path, required this.title, this.volume = .8})
+      : player = AudioPlayer();
 }
 
 class MeshPainter extends CustomPainter {
@@ -196,10 +406,10 @@ class MeshPainter extends CustomPainter {
 }
 
 const tabs = [
-  ('Transform', Icons.open_with), ('Color', Icons.palette), ('Effects', Icons.auto_awesome),
-  ('Mesh', Icons.grid_on), ('Text', Icons.text_fields), ('Opacity', Icons.opacity),
-  ('Keyframes', Icons.diamond_outlined), ('Timing', Icons.timelapse),
-  ('Audio', Icons.volume_up), ('Layer', Icons.layers),
+  ('Transform', Icons.open_with), ('Adjust', Icons.tune), ('Color', Icons.palette),
+  ('Effects', Icons.auto_awesome), ('Mesh', Icons.grid_on), ('Text', Icons.text_fields),
+  ('Opacity', Icons.opacity), ('Keyframes', Icons.diamond_outlined),
+  ('Timing', Icons.timelapse), ('Audio', Icons.volume_up), ('Layer', Icons.layers),
 ];
 
 // ---------- Editor ----------
