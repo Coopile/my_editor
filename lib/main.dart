@@ -645,6 +645,246 @@ class _EditorState extends State<Editor> {
     ];
   }
 
+  String _ffArg(String value) =>
+      '"\${value.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
+
+  String _filterText(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll(':', r'\:')
+      .replaceAll("'", r"\'")
+      .replaceAll(',', r'\,')
+      .replaceAll('%', r'\%')
+      .replaceAll('[', r'\[')
+      .replaceAll(']', r'\]');
+
+  String _exportEffectFilter() {
+    final name = fxLibrary[_videoFx].$1;
+    final amount = _videoFxStrength.clamp(0.0, 2.0);
+    final speed = _videoFxSpeed.clamp(.1, 3.0);
+    switch (name) {
+      case 'Shake':
+        final drift = (.025 * amount).toStringAsFixed(4);
+        return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*\${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*\${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
+      case 'Zoom Pulse':
+        return "scale=iw*(1+0.045*sin(t*\${6 * speed})):ih*(1+0.045*sin(t*\${6 * speed})):eval=frame,crop=iw/1.045:ih/1.045";
+      case 'Spin':
+        return "rotate='0.025*sin(t*\${2.4 * speed})':c=black@0";
+      case 'Glitch':
+      case 'RGB Split':
+        return "rgbashift=rh='sin(t*\${42 * speed})*\${(5 * amount).toStringAsFixed(2)}':bh='-sin(t*\${37 * speed})*\${(5 * amount).toStringAsFixed(2)}'";
+      case 'Flash':
+        return "eq=brightness='if(lt(mod(t,\${(0.5 / speed).toStringAsFixed(3)}),0.08),\${(0.65 * amount).toStringAsFixed(3)},0)'";
+      case 'Glow':
+        return "gblur=sigma=\${(2.5 * amount).toStringAsFixed(2)}";
+      case 'Vignette':
+        return "vignette=PI/4";
+      case 'Film Grain':
+        return "noise=alls=\${(18 * amount).round()}:allf=t+u";
+      case 'Pixelate':
+        return "scale=iw/16:ih/16:flags=neighbor,scale=iw*16:ih*16:flags=neighbor";
+      case 'Soft Blur':
+      case 'Dream Blur':
+      case 'Gaussian Blur':
+      case 'Motion Blur':
+      case 'Soft Focus':
+        return "gblur=sigma=\${(2.5 * amount).toStringAsFixed(2)}";
+      case 'Grayscale':
+      case 'Mono':
+      case 'Noir':
+      case 'Desaturate':
+        return 'hue=s=0';
+      case 'Negative':
+      case 'Invert':
+        return 'negate';
+      case 'Vintage':
+      case 'Sepia':
+      case 'Warm Film':
+      case 'Golden Hour':
+      case 'Polaroid':
+        return 'colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131';
+      case 'Brighten':
+        return 'eq=brightness=0.16';
+      case 'Darken':
+        return 'eq=brightness=-0.16';
+      case 'High Contrast':
+      case 'Deep Contrast':
+        return 'eq=contrast=1.45:saturation=1.15';
+      case 'Neon':
+        return 'eq=saturation=1.8:contrast=1.25,unsharp=5:5:0.8';
+      case 'Frost':
+      case 'Arctic':
+        return 'colorbalance=bs=0.18:gs=0.04';
+      case 'Chromatic':
+        return 'rgbashift=rh=3:bh=-3';
+      default:
+        final saturation = .8 + (_videoFx % 5) * .18;
+        final contrast = .92 + ((_videoFx ~/ 5) % 4) * .08;
+        return 'eq=contrast=\${contrast.toStringAsFixed(2)}:saturation=\${saturation.toStringAsFixed(2)}';
+    }
+  }
+
+  Future<void> _exportVideo() async {
+    final source = _videoPath;
+    if (source == null || !File(source).existsSync()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Add a video clip before exporting.')),
+      );
+      return;
+    }
+    if (_exporting) return;
+    setState(() => _exporting = true);
+    await _vc?.pause();
+    await _pauseAudio();
+
+    try {
+      final totalDuration = _videoDuration;
+      final trimStart = _trimStart.clamp(0.0, totalDuration);
+      final trimEnd = _trimEnd.clamp(trimStart + .05, totalDuration);
+      final clipDuration = trimEnd - trimStart;
+      final outputDir = await getApplicationDocumentsDirectory();
+      final outputPath =
+          '\${outputDir.path}/EditShift_\${DateTime.now().millisecondsSinceEpoch}.mp4';
+
+      var sourceHasAudio = false;
+      try {
+        final probe = await FFprobeKit.getMediaInformation(source);
+        final info = await probe.getMediaInformation();
+        sourceHasAudio = info?.getStreams().any((stream) => stream.getType() == 'audio') ?? false;
+      } catch (_) {
+        sourceHasAudio = false;
+      }
+
+      final imageLayers = _layers.where((layer) =>
+          layer.isImage && !layer.hidden && layer.imagePath != null &&
+          layer.end * totalDuration > trimStart &&
+          layer.start * totalDuration < trimEnd).toList();
+      final textLayers = _layers.where((layer) =>
+          !layer.isImage && !layer.isMesh && !layer.hidden &&
+          layer.text.trim().isNotEmpty &&
+          layer.end * totalDuration > trimStart &&
+          layer.start * totalDuration < trimEnd).toList();
+
+      final command = StringBuffer();
+      command.write('-ss \${trimStart.toStringAsFixed(3)} -i \${_ffArg(source)} ');
+      for (final layer in imageLayers) {
+        command.write('-loop 1 -i \${_ffArg(layer.imagePath!)} ');
+      }
+      for (final track in _audioTracks) {
+        command.write('-i \${_ffArg(track.path)} ');
+      }
+
+      final videoFilters = <String>[];
+      final effect = _exportEffectFilter();
+      if (effect.isNotEmpty) videoFilters.add(effect);
+      videoFilters.add(
+        'eq=brightness=\${_brightness.toStringAsFixed(3)}:contrast=\${_contrast.toStringAsFixed(3)}:saturation=\${_saturation.toStringAsFixed(3)}',
+      );
+
+      final graph = <String>[];
+      graph.add('[0:v]\${videoFilters.join(',')}[v0]');
+      var currentVideo = 'v0';
+      var outputNumber = 0;
+      final videoSize = _vc?.value.size ?? const Size(1280, 720);
+      final scale = videoSize.width / math.max(1, _stageSize.width);
+
+      for (int i = 0; i < imageLayers.length; i++) {
+        final layer = imageLayers[i];
+        final inputIndex = i + 1;
+        final imageLabel = 'image$i';
+        final nextLabel = 'v\${++outputNumber}';
+        final imageWidth = (190 * layer.scale * scale).round().clamp(24, 4096);
+        final x = (layer.pos.dx * scale).round();
+        final y = (layer.pos.dy * scale).round();
+        final start = (layer.start * totalDuration - trimStart).clamp(0.0, clipDuration);
+        final end = (layer.end * totalDuration - trimStart).clamp(0.0, clipDuration);
+        if (end <= start) continue;
+        graph.add('[$inputIndex:v]scale=$imageWidth:-1[$imageLabel]');
+        graph.add('[$currentVideo][$imageLabel]overlay=x=$x:y=$y:enable=\'between(t,$start,$end)\'[$nextLabel]');
+        currentVideo = nextLabel;
+      }
+
+      for (final layer in textLayers) {
+        final nextLabel = 'v\${++outputNumber}';
+        final start = (layer.start * totalDuration - trimStart).clamp(0.0, clipDuration);
+        final end = (layer.end * totalDuration - trimStart).clamp(0.0, clipDuration);
+        if (end <= start) continue;
+        final x = (layer.pos.dx * scale).round();
+        final y = (layer.pos.dy * scale).round();
+        final fontSize = (layer.fontSize * scale).round().clamp(10, 260);
+        final colorHex = layer.color.value.toRadixString(16).padLeft(8, '0').substring(2);
+        final text = _filterText(layer.text);
+        graph.add(
+          '[$currentVideo]drawtext=text=\'$text\':fontcolor=0x$colorHex:fontsize=$fontSize:x=$x:y=$y:borderw=2:bordercolor=black@0.45:enable=\'between(t,$start,$end)\'[$nextLabel]',
+        );
+        currentVideo = nextLabel;
+      }
+
+      final audioInputStart = 1 + imageLayers.length;
+      final audioLabels = <String>[];
+      if (sourceHasAudio) {
+        graph.add('[0:a]volume=\${_vol.toStringAsFixed(3)}[baseaudio]');
+        audioLabels.add('[baseaudio]');
+      }
+      for (int i = 0; i < _audioTracks.length; i++) {
+        final track = _audioTracks[i];
+        final inputIndex = audioInputStart + i;
+        final start = (track.start * totalDuration - trimStart).clamp(0.0, clipDuration);
+        final end = (track.end * totalDuration - trimStart).clamp(0.0, clipDuration);
+        if (end <= start) continue;
+        final delay = (start * 1000).round();
+        final length = (end - start).toStringAsFixed(3);
+        final label = 'audio$i';
+        graph.add('[$inputIndex:a]atrim=duration=$length,asetpts=PTS-STARTPTS,adelay=$delay|$delay,volume=\${track.volume.toStringAsFixed(3)}[$label]');
+        audioLabels.add('[$label]');
+      }
+
+      graph.add('[$currentVideo]null[vout]');
+      if (audioLabels.length > 1) {
+        graph.add('\${audioLabels.join()}amix=inputs=\${audioLabels.length}:duration=longest:dropout_transition=2[aout]');
+      } else if (audioLabels.length == 1) {
+        graph.add('\${audioLabels.single}anull[aout]');
+      }
+
+      command.write('-t \${clipDuration.toStringAsFixed(3)} ');
+      command.write('-filter_complex "\${graph.join(';')}" ');
+      command.write('-map "[vout]" ');
+      if (audioLabels.isNotEmpty) {
+        command.write('-map "[aout]" -c:a aac -b:a 192k ');
+      } else {
+        command.write('-an ');
+      }
+      command.write('-c:v mpeg4 -q:v 2 -pix_fmt yuv420p -movflags +faststart \${_ffArg(outputPath)}');
+
+      final session = await FFmpegKit.execute(command.toString());
+      final returnCode = await session.getReturnCode();
+      if (!ReturnCode.isSuccess(returnCode) || !File(outputPath).existsSync()) {
+        final logs = await session.getLogs();
+        final details = logs.map((log) => log.getMessage()).join('\n');
+        throw Exception(details.isEmpty ? 'FFmpeg export failed.' : details);
+      }
+
+      await SharePlus.instance.share(
+        ShareParams(
+          title: 'EditShift export',
+          text: 'Exported with EditShift',
+          files: [XFile(outputPath)],
+        ),
+      );
+    } catch (error) {
+      if (mounted) {
+        final message = error.toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Export failed: \${message.length > 220 ? message.substring(0, 220) : message}'),
+            duration: const Duration(seconds: 7),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _exporting = false);
+    }
+  }
+
   String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
 
   Widget _layerView(int i) {
