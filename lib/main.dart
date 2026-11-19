@@ -399,13 +399,15 @@ class _EditorState extends State<Editor> {
           itemCount: tabs.length,
           itemBuilder: (_, i) => InkWell(
             onTap: () => setState(() => _tab = i),
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
               width: 74,
               decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(
-                      color: _tab == i ? Colors.indigo : Colors.transparent, width: 3))),
+                      color: _tab == i ? const Color(0xFF8B5CF6) : Colors.transparent, width: 3))),
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(tabs[i].$2, color: _tab == i ? Colors.indigo : null),
+                Icon(tabs[i].$2, color: _tab == i ? const Color(0xFFB69CFF) : Colors.white54),
                 Text(tabs[i].$1, style: const TextStyle(fontSize: 11)),
               ]),
             ),
@@ -574,9 +576,11 @@ class _EditorState extends State<Editor> {
 
   Widget _panel() {
     final l = _sel == null ? null : _layers[_sel!];
-    return Column(children: [
+    return Container(
+      color: const Color(0xFF111321),
+      child: Column(children: [
       _tabBar(),
-      const Divider(height: 1),
+      const Divider(height: 1, color: Colors.white10),
       Expanded(
         child: ListView(padding: const EdgeInsets.all(12), children: [
           if (_vc != null) _track('Video', Colors.blue.shade100, 0, 1),
@@ -591,7 +595,7 @@ class _EditorState extends State<Editor> {
           ..._body(l),
         ]),
       ),
-    ]);
+    ]));
   }
 
   Widget _tool(IconData icon, String label, VoidCallback onTap) => InkWell(
@@ -605,7 +609,7 @@ class _EditorState extends State<Editor> {
       );
 
   Widget _toolbar() => Container(
-        decoration: const BoxDecoration(border: Border(top: BorderSide(color: Colors.black12))),
+        decoration: const BoxDecoration(color: Color(0xFF111321), border: Border(top: BorderSide(color: Colors.white10))),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
           _tool(Icons.add, 'Add', _pickVideo),
           _tool(Icons.title, 'Text', _addText),
@@ -617,7 +621,10 @@ class _EditorState extends State<Editor> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.projectName),
+        backgroundColor: const Color(0xFF0D0F1B),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(widget.projectName, style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.3)),
         actions: [
           if (_pivotMode) const Padding(padding: EdgeInsets.only(right: 8), child: Center(child: Text('PIVOT MODE · drag the purple handle', style: TextStyle(color: Color(0xFF43D9D2), fontSize: 11)))),
           TextButton(
