@@ -71,6 +71,7 @@ const fxLibrary = [
   ('Deep Contrast', Icons.auto_awesome),
   ('Color Pop', Icons.auto_awesome),
   ('Chromatic', Icons.auto_awesome),
+  ('Bend', Icons.auto_awesome),
 ];
 const _m = {
   'Gray': [0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0, 0, 0, 1, 0],
