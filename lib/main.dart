@@ -1347,42 +1347,194 @@ class _EditorState extends State<Editor> {
 
   List<Widget> _body(Layer? l) {
     final name = tabs[_tab].$1;
-    if (name == 'Effects') {
-      final cur = l?.fx ?? _videoFx;
+
+    if (name == 'Adjust') {
       return [
-        Text('Applies to: ${l == null ? 'video' : 'selected layer'}'),
-        if (l != null && fxLibrary[cur].$1 == 'Bend')
-          _s(l, 'Bend amount', l.bend, -0.8, 0.8, (v) => l.bend = v),
+        const Text('COLOR & LIGHT', style: TextStyle(fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w900, color: Color(0xFF43D9D2))),
         const SizedBox(height: 8),
-        Wrap(spacing: 8, runSpacing: 8, children: [
+        _globalS('Brightness', _brightness, -1, 1, (v) => setState(() => _brightness = v)),
+        _globalS('Contrast', _contrast, 0, 2, (v) => setState(() => _contrast = v)),
+        _globalS('Saturation', _saturation, 0, 2, (v) => setState(() => _saturation = v)),
+        const SizedBox(height: 8),
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: () => setState(() {
+              _brightness = 0;
+              _contrast = 1;
+              _saturation = 1;
+            }),
+            icon: const Icon(Icons.restart_alt_rounded, size: 16),
+            label: const Text('Reset adjustments'),
+          ),
+        ),
+        const Text('Adjustments are applied to the video preview and exported render.',
+            style: TextStyle(fontSize: 10, color: Colors.white38)),
+      ];
+    }
+
+    if (name == 'Effects') {
+      final current = l?.fx ?? _videoFx;
+      final currentName = fxLibrary[current].$1;
+      return [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(
+              colors: [Color(0xFF33245F), Color(0xFF14333F)],
+            ),
+          ),
+          child: Row(children: [
+            const Icon(Icons.auto_awesome_rounded, color: Color(0xFF43D9D2), size: 22),
+            const SizedBox(width: 10),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('EFFECT STUDIO', style: TextStyle(fontSize: 9, letterSpacing: 1.6, color: Colors.white70, fontWeight: FontWeight.w800)),
+              Text(currentName, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 17)),
+            ])),
+            const Icon(Icons.graphic_eq_rounded, color: Colors.white70),
+          ]),
+        ),
+        const SizedBox(height: 12),
+        const Text('MOTION · LIGHT · LENS · COLOR',
+            style: TextStyle(fontSize: 9, letterSpacing: 1.1, color: Colors.white38, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 9, runSpacing: 9, children: [
           for (int i = 0; i < fxLibrary.length; i++)
             InkWell(
-              onTap: () => setState(() { if (l == null) { _videoFx = i; } else { l.fx = i; } }),
-              child: Container(
-                width: 68, height: 64,
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: cur == i ? Colors.blue : Colors.black26, width: cur == i ? 2 : 1)),
-                child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                  Icon(fxLibrary[i].$2), Text(fxLibrary[i].$1, style: const TextStyle(fontSize: 11)),
+              borderRadius: BorderRadius.circular(14),
+              onTap: () => setState(() {
+                if (l == null) {
+                  _videoFx = i;
+                } else {
+                  _pushUndo();
+                  l.fx = i;
+                }
+              }),
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 160),
+                width: 94,
+                height: 76,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: current == i
+                        ? [const Color(0xFF8B5CF6), const Color(0xFF266F83)]
+                        : [const Color(0xFF24283E), const Color(0xFF171A2B)],
+                  ),
+                  border: Border.all(
+                    color: current == i ? const Color(0xFFBFA8FF) : Colors.white.withOpacity(.06),
+                    width: current == i ? 1.5 : 1,
+                  ),
+                  boxShadow: current == i
+                      ? [BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(.22), blurRadius: 14)]
+                      : null,
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                  Icon(fxLibrary[i].$2, size: 19, color: current == i ? Colors.white : const Color(0xFF9D8FC8)),
+                  Text(fxLibrary[i].$1, maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
                 ]),
               ),
             ),
         ]),
+        const SizedBox(height: 12),
+        const Text('EFFECT SETTINGS', style: TextStyle(fontSize: 9, letterSpacing: 1.3, color: Colors.white38, fontWeight: FontWeight.w800)),
+        if (l == null) ...[
+          _globalS('Intensity', _videoFxStrength, 0, 2, (v) => setState(() => _videoFxStrength = v)),
+          _globalS('Speed', _videoFxSpeed, .2, 3, (v) => setState(() => _videoFxSpeed = v), suffix: '×'),
+        ] else ...[
+          _s(l, 'Intensity', l.fxStrength, 0, 2, (v) => l.fxStrength = v),
+          _s(l, 'Speed', l.fxSpeed, .2, 3, (v) => l.fxSpeed = v),
+          if (currentName == 'Bend')
+            _s(l, 'Bend', l.bend, -0.8, 0.8, (v) => l.bend = v),
+        ],
       ];
     }
+
     if (name == 'Audio') {
       return [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: const LinearGradient(colors: [Color(0xFF193A4E), Color(0xFF1C2440)]),
+          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('MAIN CLIP VOLUME', style: TextStyle(fontSize: 9, letterSpacing: 1.4, color: Colors.white60, fontWeight: FontWeight.w800)),
+            Row(children: [
+              Icon(_vol == 0 ? Icons.volume_off_rounded : Icons.volume_up_rounded, color: const Color(0xFF62C9FF)),
+              Expanded(child: Slider(value: _vol, onChanged: (v) {
+                setState(() => _vol = v);
+                _vc?.setVolume(v);
+              })),
+              Text('\${(_vol * 100).round()}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+            ]),
+          ]),
+        ),
+        const SizedBox(height: 12),
         Row(children: [
-          const Text('Volume'),
-          Expanded(child: Slider(value: _vol, onChanged: (v) { setState(() => _vol = v); _vc?.setVolume(v); })),
-          IconButton(
-            icon: Icon(_vol == 0 ? Icons.volume_off : Icons.volume_up),
-            onPressed: () { setState(() => _vol = _vol == 0 ? 1 : 0); _vc?.setVolume(_vol); },
+          const Expanded(child: Text('AUDIO & SOUND EFFECTS', style: TextStyle(fontSize: 9, letterSpacing: 1.2, color: Colors.white38, fontWeight: FontWeight.w800))),
+          FilledButton.icon(
+            onPressed: _addAudio,
+            icon: const Icon(Icons.add, size: 16),
+            label: const Text('Add audio'),
+            style: FilledButton.styleFrom(
+              backgroundColor: const Color(0xFF2E7E9D),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
           ),
         ]),
+        if (_audioTracks.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(child: Text('Add music, ambience or sound effects to build an audio track.',
+                textAlign: TextAlign.center, style: TextStyle(color: Colors.white38, fontSize: 11))),
+          ),
+        for (final track in _audioTracks)
+          Container(
+            margin: const EdgeInsets.only(top: 8),
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(15),
+              color: const Color(0xFF1A2032),
+              border: Border.all(color: const Color(0xFF62C9FF).withOpacity(.22)),
+            ),
+            child: Column(children: [
+              Row(children: [
+                const Icon(Icons.graphic_eq_rounded, color: Color(0xFF62C9FF), size: 18),
+                const SizedBox(width: 8),
+                Expanded(child: Text(track.title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _deleteAudio(track),
+                  icon: const Icon(Icons.delete_outline, color: Colors.white54, size: 18),
+                ),
+              ]),
+              Row(children: [
+                const Text('Track volume', style: TextStyle(fontSize: 10, color: Colors.white60)),
+                Expanded(child: Slider(value: track.volume, onChanged: (v) {
+                  setState(() => track.volume = v);
+                  track.player.setVolume(v);
+                })),
+                Text('\${(track.volume * 100).round()}%', style: const TextStyle(fontSize: 10)),
+              ]),
+            ]),
+          ),
+        const SizedBox(height: 8),
+        const Text('Audio clips appear on their own timeline track. Their start and end points can be trimmed there.',
+            style: TextStyle(color: Colors.white38, fontSize: 10)),
       ];
     }
-    if (l == null) return [_note('Select a layer (or add text or a mesh) to use this tab.')];
+
+    if (l == null) {
+      return [_note('Select a layer in the timeline to edit its position, timing, captions or opacity.')];
+    }
+
     switch (name) {
       case 'Transform':
         return [
@@ -1393,110 +1545,162 @@ class _EditorState extends State<Editor> {
           _s(l, 'Pivot X', l.pivot.dx, 0, 1, (v) => l.pivot = Offset(v, l.pivot.dy)),
           _s(l, 'Pivot Y', l.pivot.dy, 0, 1, (v) => l.pivot = Offset(l.pivot.dx, v)),
           Wrap(spacing: 8, children: [
-            FilterChip(label: const Text('Flip horizontal'), selected: l.flipX, onSelected: (v) => setState(() => l.flipX = v)),
-            FilterChip(label: const Text('Flip vertical'), selected: l.flipY, onSelected: (v) => setState(() => l.flipY = v)),
+            FilterChip(label: const Text('Flip horizontal'), selected: l.flipX,
+                onSelected: (v) => _ed(l, () => l.flipX = v)),
+            FilterChip(label: const Text('Flip vertical'), selected: l.flipY,
+                onSelected: (v) => _ed(l, () => l.flipY = v)),
           ]),
         ];
       case 'Color':
         return [
           Wrap(spacing: 10, runSpacing: 10, children: [
-            for (final c in [Colors.white, Colors.black, Colors.red, Colors.orange, Colors.yellow,
+            for (final color in [Colors.white, Colors.black, Colors.red, Colors.orange, Colors.yellow,
               Colors.green, Colors.cyan, Colors.blue, Colors.purple, Colors.pink])
               GestureDetector(
-                onTap: () => setState(() => l.color = c),
+                onTap: () => _ed(l, () => l.color = color),
                 child: Container(
                   width: 40, height: 40,
-                  decoration: BoxDecoration(color: c, shape: BoxShape.circle,
-                      border: Border.all(color: l.color == c ? Colors.blue : Colors.black26, width: l.color == c ? 3 : 1)),
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: l.color == color ? Colors.white : Colors.black26, width: l.color == color ? 3 : 1),
+                  ),
                 ),
               ),
           ]),
           if (l.isMesh) _note('On a mesh layer this sets the center color.'),
+          if (l.isImage) _note('Use Adjust to change the overall video look, or Effects to style this photo.'),
         ];
       case 'Mesh':
         if (!l.isMesh) return [_note('Select a mesh layer. Add one with the Mesh button.')];
         return [
           _note('Drag the white points on the preview to warp the mesh.'),
           Wrap(spacing: 8, children: [
-            ActionChip(label: const Text('Reset'), onPressed: () => setState(() => l.mesh = defaultMesh())),
+            ActionChip(label: const Text('Reset'), onPressed: () => _ed(l, () => l.mesh = defaultMesh())),
             ActionChip(
               label: const Text('Wave'),
-              onPressed: () => setState(() => l.mesh = [
-                    for (int r = 0; r < 3; r++)
-                      for (int c = 0; c < 3; c++) Offset(c / 2, r / 2 + (c == 1 ? (r == 0 ? .1 : -.1) : 0))
-                  ]),
+              onPressed: () => _ed(l, () => l.mesh = [
+                for (int r = 0; r < 3; r++)
+                  for (int col = 0; col < 3; col++)
+                    Offset(col / 2, r / 2 + (col == 1 ? (r == 0 ? .1 : -.1) : 0))
+              ]),
             ),
             ActionChip(
               label: const Text('Pinch'),
-              onPressed: () => setState(() => l.mesh = [
-                    for (final p in l.mesh) Offset(.5 + (p.dx - .5) * .7, .5 + (p.dy - .5) * .7)
-                  ]),
+              onPressed: () => _ed(l, () => l.mesh = [
+                for (final point in l.mesh)
+                  Offset(.5 + (point.dx - .5) * .7, .5 + (point.dy - .5) * .7)
+              ]),
             ),
           ]),
         ];
       case 'Text':
-        if (l.isMesh) return [_note('Select a text layer.')];
+        if (l.isMesh || l.isImage) return [_note('Select a caption layer to edit its text.')];
         return [
           TextFormField(
-            key: ValueKey(l), initialValue: l.text,
-            decoration: const InputDecoration(labelText: 'Text'),
-            onChanged: (v) => setState(() => l.text = v),
+            key: ValueKey(l),
+            initialValue: l.text,
+            decoration: const InputDecoration(labelText: 'Caption text'),
+            onChanged: (v) => _ed(l, () => l.text = v),
           ),
           _s(l, 'Font size', l.fontSize, 12, 120, (v) => l.fontSize = v),
           Wrap(spacing: 8, children: [
-            FilterChip(label: const Text('Bold'), selected: l.bold, onSelected: (v) => setState(() => l.bold = v)),
-            FilterChip(label: const Text('Italic'), selected: l.italic, onSelected: (v) => setState(() => l.italic = v)),
+            FilterChip(label: const Text('Bold'), selected: l.bold,
+                onSelected: (v) => _ed(l, () => l.bold = v)),
+            FilterChip(label: const Text('Italic'), selected: l.italic,
+                onSelected: (v) => _ed(l, () => l.italic = v)),
           ]),
         ];
       case 'Opacity':
         return [
           _s(l, 'Opacity', l.opacity, 0, 1, (v) => l.opacity = v),
-          SwitchListTile(title: const Text('Shadow (text)'), value: l.shadow, onChanged: (v) => setState(() => l.shadow = v)),
+          if (!l.isImage && !l.isMesh)
+            SwitchListTile(
+              title: const Text('Text shadow'),
+              value: l.shadow,
+              onChanged: (v) => _ed(l, () => l.shadow = v),
+            ),
         ];
       case 'Keyframes':
         return [
-          _note('Add a keyframe at the current time, move the playhead, change position, size, rotation or opacity, and it animates between them.'),
+          _note('Add keyframes at different moments to animate position, scale, rotation and opacity.'),
           Wrap(spacing: 8, runSpacing: 8, children: [
-            FilledButton.icon(icon: const Icon(Icons.diamond), label: const Text('Add keyframe here'),
-                onPressed: () => setState(() => l.upsert(_ms))),
-            OutlinedButton(onPressed: () => setState(() => l.kfs.clear()), child: const Text('Clear all')),
+            FilledButton.icon(
+              icon: const Icon(Icons.diamond),
+              label: const Text('Add keyframe here'),
+              onPressed: () => _ed(l, () => l.upsert(_ms)),
+            ),
+            OutlinedButton(
+              onPressed: () => _ed(l, () => l.kfs.clear()),
+              child: const Text('Clear all'),
+            ),
           ]),
           const SizedBox(height: 8),
           Wrap(spacing: 6, children: [
-            for (final k in l.kfs)
+            for (final keyframe in l.kfs)
               ActionChip(
                 avatar: const Icon(Icons.diamond, size: 14),
-                label: Text(_fmt(Duration(milliseconds: k.t))),
-                onPressed: () => _vc?.seekTo(Duration(milliseconds: k.t)),
+                label: Text(_fmt(Duration(milliseconds: keyframe.t))),
+                onPressed: () => _vc?.seekTo(Duration(milliseconds: keyframe.t)),
               ),
           ]),
         ];
       case 'Timing':
         return [
-          const Text('When this layer is visible'),
+          const Text('Clip visibility on the timeline'),
           RangeSlider(
             values: RangeValues(l.start, l.end),
-            onChanged: (v) => setState(() { l.start = v.start; l.end = v.end; }),
+            min: 0,
+            max: 1,
+            onChanged: (range) => _ed(l, () {
+              l.start = range.start;
+              l.end = range.end;
+            }),
           ),
+          Text('\${(l.start * 100).round()}% — \${(l.end * 100).round()}%',
+              style: const TextStyle(color: Colors.white54, fontSize: 10)),
         ];
       default:
-        final i = _sel!;
+        final index = _sel!;
         return [
           Wrap(spacing: 8, runSpacing: 8, children: [
-            OutlinedButton.icon(icon: const Icon(Icons.copy), label: const Text('Duplicate'),
-                onPressed: () => _add(l.copy())),
             OutlinedButton.icon(
-                icon: Icon(l.hidden ? Icons.visibility_off : Icons.visibility),
-                label: Text(l.hidden ? 'Show' : 'Hide'),
-                onPressed: () => setState(() => l.hidden = !l.hidden)),
-            OutlinedButton.icon(icon: const Icon(Icons.arrow_upward), label: const Text('Forward'),
-                onPressed: i == _layers.length - 1 ? null : () => setState(() {
-                      _layers.insert(i + 1, _layers.removeAt(i)); _sel = i + 1; })),
-            OutlinedButton.icon(icon: const Icon(Icons.arrow_downward), label: const Text('Back'),
-                onPressed: i == 0 ? null : () => setState(() {
-                      _layers.insert(i - 1, _layers.removeAt(i)); _sel = i - 1; })),
-            OutlinedButton.icon(icon: const Icon(Icons.delete_outline), label: const Text('Delete'),
-                onPressed: () => setState(() { _layers.removeAt(i); _sel = null; })),
+              icon: const Icon(Icons.copy),
+              label: const Text('Duplicate'),
+              onPressed: () => _add(l.copy()),
+            ),
+            OutlinedButton.icon(
+              icon: Icon(l.hidden ? Icons.visibility_off : Icons.visibility),
+              label: Text(l.hidden ? 'Show' : 'Hide'),
+              onPressed: () => _ed(l, () => l.hidden = !l.hidden),
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.arrow_upward),
+              label: const Text('Forward'),
+              onPressed: index == _layers.length - 1 ? null : () {
+                _pushUndo();
+                setState(() {
+                  _layers.insert(index + 1, _layers.removeAt(index));
+                  _sel = index + 1;
+                });
+              },
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.arrow_downward),
+              label: const Text('Back'),
+              onPressed: index == 0 ? null : () {
+                _pushUndo();
+                setState(() {
+                  _layers.insert(index - 1, _layers.removeAt(index));
+                  _sel = index - 1;
+                });
+              },
+            ),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Delete layer'),
+              onPressed: _deleteSelected,
+            ),
           ]),
         ];
     }
