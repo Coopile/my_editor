@@ -4,11 +4,18 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'home_screen.dart';
 
 void main() => runApp(MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      home: const Editor(),
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF090A12),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8B5CF6), brightness: Brightness.dark),
+        fontFamily: 'Roboto',
+      ),
+      home: const HomeScreen(),
     ));
 
 // ---------- Effects library ----------
@@ -123,7 +130,8 @@ const tabs = [
 
 // ---------- Editor ----------
 class Editor extends StatefulWidget {
-  const Editor({super.key});
+  final String projectName;
+  const Editor({super.key, this.projectName = 'Untitled project'});
   @override
   State<Editor> createState() => _EditorState();
 }
@@ -544,7 +552,7 @@ class _EditorState extends State<Editor> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My project'),
+        title: Text(widget.projectName),
         actions: [
           TextButton(
             onPressed: () => ScaffoldMessenger.of(context)
