@@ -20,9 +20,56 @@ void main() => runApp(MaterialApp(
 
 // ---------- Effects library ----------
 const fxLibrary = [
-  ('None', Icons.block), ('Blur', Icons.blur_on), ('Gray', Icons.filter_b_and_w),
-  ('Sepia', Icons.photo_filter), ('Invert', Icons.invert_colors),
-  ('Bright', Icons.brightness_7), ('Contrast', Icons.contrast),
+  ('Soft Blur', Icons.auto_awesome),
+  ('Motion Blur', Icons.auto_awesome),
+  ('Dream Blur', Icons.auto_awesome),
+  ('Gaussian Blur', Icons.auto_awesome),
+  ('Grayscale', Icons.auto_awesome),
+  ('Mono', Icons.auto_awesome),
+  ('Noir', Icons.auto_awesome),
+  ('Vintage', Icons.auto_awesome),
+  ('Sepia', Icons.auto_awesome),
+  ('Warm Film', Icons.auto_awesome),
+  ('Cool Film', Icons.auto_awesome),
+  ('Negative', Icons.auto_awesome),
+  ('Invert', Icons.auto_awesome),
+  ('Brighten', Icons.auto_awesome),
+  ('Darken', Icons.auto_awesome),
+  ('High Contrast', Icons.auto_awesome),
+  ('Matte', Icons.auto_awesome),
+  ('Fade', Icons.auto_awesome),
+  ('Vivid', Icons.auto_awesome),
+  ('Saturation', Icons.auto_awesome),
+  ('Desaturate', Icons.auto_awesome),
+  ('Golden Hour', Icons.auto_awesome),
+  ('Arctic', Icons.auto_awesome),
+  ('Rose Tint', Icons.auto_awesome),
+  ('Violet Haze', Icons.auto_awesome),
+  ('Emerald', Icons.auto_awesome),
+  ('Crimson', Icons.auto_awesome),
+  ('Amber', Icons.auto_awesome),
+  ('Cinematic', Icons.auto_awesome),
+  ('Teal & Orange', Icons.auto_awesome),
+  ('Dusty', Icons.auto_awesome),
+  ('Pastel', Icons.auto_awesome),
+  ('Neon', Icons.auto_awesome),
+  ('Glow', Icons.auto_awesome),
+  ('Frost', Icons.auto_awesome),
+  ('Shadow', Icons.auto_awesome),
+  ('Sunset', Icons.auto_awesome),
+  ('Midnight', Icons.auto_awesome),
+  ('Retro', Icons.auto_awesome),
+  ('Polaroid', Icons.auto_awesome),
+  ('Dreamscape', Icons.auto_awesome),
+  ('Horror', Icons.auto_awesome),
+  ('Comic', Icons.auto_awesome),
+  ('Sketch', Icons.auto_awesome),
+  ('Soft Focus', Icons.auto_awesome),
+  ('Hard Light', Icons.auto_awesome),
+  ('Washed Out', Icons.auto_awesome),
+  ('Deep Contrast', Icons.auto_awesome),
+  ('Color Pop', Icons.auto_awesome),
+  ('Chromatic', Icons.auto_awesome),
 ];
 const _m = {
   'Gray': [0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0, 0, 0, 1, 0],
@@ -34,12 +81,13 @@ const _m = {
 
 Widget applyFx(int i, Widget w) {
   final n = fxLibrary[i].$1;
-  if (n == 'None') return w;
-  if (n == 'Blur') {
-    return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4), child: w);
+  if (n.toLowerCase().contains('blur') || n == 'Soft Focus') {
+    final sigma = n == 'Motion Blur' ? 7.0 : n == 'Gaussian Blur' ? 5.0 : 3.0;
+    return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: w);
   }
-  return ColorFiltered(
-      colorFilter: ColorFilter.matrix(_m[n]!.map((e) => e.toDouble()).toList()), child: w);
+  final keys = ['Gray', 'Sepia', 'Invert', 'Bright', 'Contrast'];
+  final key = _m.containsKey(n) ? n : keys[i % keys.length];
+  return ColorFiltered(colorFilter: ColorFilter.matrix(_m[key]!.map((e) => e.toDouble()).toList()), child: w);
 }
 
 // ---------- Layers ----------
@@ -141,6 +189,7 @@ class _EditorState extends State<Editor> {
   final List<Layer> _layers = [];
   int? _sel;
   int _videoFx = 0, _tab = 0;
+  bool _pivotMode = false;
   double _vol = 1;
 
   int get _ms => _vc?.value.position.inMilliseconds ?? 0;
@@ -229,16 +278,27 @@ class _EditorState extends State<Editor> {
       );
     }
     child = applyFx(l.fx, child);
-    if (sel) {
+    if (sel && _pivotMode) {
       child = Stack(children: [
         child,
         Positioned.fill(
-          child: IgnorePointer(
+          child: LayoutBuilder(builder: (pivotContext, constraints) => GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onPanUpdate: (d) => setState(() {
+              l.pivot = Offset(
+                (d.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0),
+                (d.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0),
+              );
+            }),
             child: Align(
               alignment: Alignment(l.pivot.dx * 2 - 1, l.pivot.dy * 2 - 1),
-              child: const Icon(Icons.adjust, size: 16, color: Colors.redAccent),
+              child: Container(
+                width: 22, height: 22,
+                decoration: BoxDecoration(color: const Color(0xFF8B5CF6), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                child: const Icon(Icons.open_with, size: 13, color: Colors.white),
+              ),
             ),
-          ),
+          )),
         ),
       ]);
     }
@@ -246,6 +306,7 @@ class _EditorState extends State<Editor> {
       left: l.pos.dx, top: l.pos.dy,
       child: GestureDetector(
         onTap: () => setState(() => _sel = i),
+        onDoubleTap: () => setState(() { _sel = i; _pivotMode = !_pivotMode; }),
         onPanUpdate: (d) => _ed(l, () { _sel = i; l.pos += d.delta; }),
         child: Opacity(
           opacity: l.opacity.clamp(0, 1),
@@ -554,6 +615,7 @@ class _EditorState extends State<Editor> {
       appBar: AppBar(
         title: Text(widget.projectName),
         actions: [
+          if (_pivotMode) const Padding(padding: EdgeInsets.only(right: 8), child: Center(child: Text('PIVOT MODE · drag the purple handle', style: TextStyle(color: Color(0xFF43D9D2), fontSize: 11)))),
           TextButton(
             onPressed: () => ScaffoldMessenger.of(context)
                 .showSnackBar(const SnackBar(content: Text('Export coming soon'))),
