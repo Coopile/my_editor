@@ -209,7 +209,9 @@ Widget applyFx(
     case 'Pixelate':
       return ImageFiltered(
         imageFilter: ui.ImageFilter.matrix(
-          Matrix4.identity()..scale(0.16 + (1 - amount.clamp(0.0, 1.0).toDouble()) * .12),
+          (Matrix4.identity()
+            ..scale(0.16 + (1 - amount.clamp(0.0, 1.0).toDouble()) * .12))
+              .storage,
         ),
         child: w,
       );
