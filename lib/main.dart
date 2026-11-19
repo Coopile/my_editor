@@ -20,6 +20,7 @@ void main() => runApp(MaterialApp(
 
 // ---------- Effects library ----------
 const fxLibrary = [
+  ('None', Icons.block),
   ('Soft Blur', Icons.auto_awesome),
   ('Motion Blur', Icons.auto_awesome),
   ('Dream Blur', Icons.auto_awesome),
@@ -81,7 +82,7 @@ const _m = {
 
 Widget applyFx(int i, Widget w) {
   final n = fxLibrary[i].$1;
-  if (n == 'Bend') return w;
+  if (n == 'None' || n == 'Bend') return w;
   if (n.toLowerCase().contains('blur') || n == 'Soft Focus') {
     final sigma = n == 'Motion Blur' ? 7.0 : n == 'Gaussian Blur' ? 5.0 : 3.0;
     return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: w);
