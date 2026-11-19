@@ -118,7 +118,7 @@ class Layer {
   Layer.mesh(this.pos) : isMesh = true, text = 'Mesh';
 
   Layer copy() => (isMesh ? Layer.mesh(pos + const Offset(20, 20)) : Layer.text(text, pos + const Offset(20, 20)))
-    ..scale = scale ..rot = rot ..opacity = opacity ..fontSize = fontSize ..start = start ..end = end
+    ..scale = scale ..rot = rot ..opacity = opacity ..fontSize = fontSize ..start = start ..end = end ..bend = bend
     ..pivot = pivot ..fx = fx ..color = color ..bold = bold ..italic = italic
     ..flipX = flipX ..flipY = flipY ..shadow = shadow ..mesh = List.of(mesh);
 
@@ -315,6 +315,7 @@ class _EditorState extends State<Editor> {
           child: Transform(
             alignment: al,
             transform: Matrix4.identity()
+              ..setEntry(1, 0, l.bend)
               ..rotateZ(l.rot)
               ..multiply(Matrix4.diagonal3Values(
                   l.scale * (l.flipX ? -1 : 1), l.scale * (l.flipY ? -1 : 1), 1)),
