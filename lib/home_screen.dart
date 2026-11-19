@@ -140,8 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: LayoutBuilder(builder: (context, c) => Row(
                         children: [
                           Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                            const Text('YOUR NEXT
-BIG EDIT STARTS HERE', style: TextStyle(color: Colors.white, fontSize: 27, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -.8)),
+                            const Text('YOUR NEXT\nBIG EDIT STARTS HERE', style: TextStyle(color: Colors.white, fontSize: 27, height: 1.08, fontWeight: FontWeight.w900, letterSpacing: -.8)),
                             const SizedBox(height: 10),
                             const Text('Cut, animate, bend reality.', style: TextStyle(color: Colors.white60, fontSize: 13)),
                             const SizedBox(height: 20),
