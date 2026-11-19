@@ -87,9 +87,32 @@ Widget applyFx(int i, Widget w) {
     final sigma = n == 'Motion Blur' ? 7.0 : n == 'Gaussian Blur' ? 5.0 : 3.0;
     return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: w);
   }
-  final keys = ['Gray', 'Sepia', 'Invert', 'Bright', 'Contrast'];
-  final key = _m.containsKey(n) ? n : keys[i % keys.length];
-  return ColorFiltered(colorFilter: ColorFilter.matrix(_m[key]!.map((e) => e.toDouble()).toList()), child: w);
+  final key = switch (n) {
+    'Grayscale' || 'Mono' || 'Noir' => 'Gray',
+    'Vintage' || 'Sepia' || 'Warm Film' || 'Golden Hour' || 'Polaroid' => 'Sepia',
+    'Negative' || 'Invert' => 'Invert',
+    'Brighten' => 'Bright',
+    'High Contrast' || 'Deep Contrast' => 'Contrast',
+    _ => '',
+  };
+  final matrix = key.isNotEmpty ? _m[key]!.map((e) => e.toDouble()).toList() : _presetMatrix(i);
+  return ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: w);
+}
+
+List<double> _presetMatrix(int index) {
+  final saturation = 0.35 + (index % 10) * 0.17;
+  final contrast = 0.72 + ((index ~/ 10) % 5) * 0.22;
+  final brightness = ((index % 7) - 3) * 8.0;
+  final a = 0.213 * (1 - saturation);
+  final b = 0.715 * (1 - saturation);
+  final c = 0.072 * (1 - saturation);
+  final bias = 128 * (1 - contrast) + brightness;
+  return [
+    (0.213 + 0.787 * saturation) * contrast, (0.715 - 0.715 * saturation) * contrast, (0.072 - 0.072 * saturation) * contrast, 0, bias,
+    (0.213 - 0.213 * saturation) * contrast, (0.715 + 0.285 * saturation) * contrast, (0.072 - 0.072 * saturation) * contrast, 0, bias,
+    (0.213 - 0.213 * saturation) * contrast, (0.715 - 0.715 * saturation) * contrast, (0.072 + 0.928 * saturation) * contrast, 0, bias,
+    0, 0, 0, 1, 0,
+  ];
 }
 
 // ---------- Layers ----------
