@@ -4,18 +4,73 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
+import 'home_screen.dart';
 
 void main() => runApp(MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(useMaterial3: true, colorSchemeSeed: Colors.indigo),
-      home: const Editor(),
+      theme: ThemeData(
+        useMaterial3: true,
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: const Color(0xFF090A12),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8B5CF6), brightness: Brightness.dark),
+        fontFamily: 'Roboto',
+      ),
+      home: const HomeScreen(),
     ));
 
 // ---------- Effects library ----------
 const fxLibrary = [
-  ('None', Icons.block), ('Blur', Icons.blur_on), ('Gray', Icons.filter_b_and_w),
-  ('Sepia', Icons.photo_filter), ('Invert', Icons.invert_colors),
-  ('Bright', Icons.brightness_7), ('Contrast', Icons.contrast),
+  ('None', Icons.block),
+  ('Soft Blur', Icons.auto_awesome),
+  ('Motion Blur', Icons.auto_awesome),
+  ('Dream Blur', Icons.auto_awesome),
+  ('Gaussian Blur', Icons.auto_awesome),
+  ('Grayscale', Icons.auto_awesome),
+  ('Mono', Icons.auto_awesome),
+  ('Noir', Icons.auto_awesome),
+  ('Vintage', Icons.auto_awesome),
+  ('Sepia', Icons.auto_awesome),
+  ('Warm Film', Icons.auto_awesome),
+  ('Cool Film', Icons.auto_awesome),
+  ('Negative', Icons.auto_awesome),
+  ('Invert', Icons.auto_awesome),
+  ('Brighten', Icons.auto_awesome),
+  ('Darken', Icons.auto_awesome),
+  ('High Contrast', Icons.auto_awesome),
+  ('Matte', Icons.auto_awesome),
+  ('Fade', Icons.auto_awesome),
+  ('Vivid', Icons.auto_awesome),
+  ('Saturation', Icons.auto_awesome),
+  ('Desaturate', Icons.auto_awesome),
+  ('Golden Hour', Icons.auto_awesome),
+  ('Arctic', Icons.auto_awesome),
+  ('Rose Tint', Icons.auto_awesome),
+  ('Violet Haze', Icons.auto_awesome),
+  ('Emerald', Icons.auto_awesome),
+  ('Crimson', Icons.auto_awesome),
+  ('Amber', Icons.auto_awesome),
+  ('Cinematic', Icons.auto_awesome),
+  ('Teal & Orange', Icons.auto_awesome),
+  ('Dusty', Icons.auto_awesome),
+  ('Pastel', Icons.auto_awesome),
+  ('Neon', Icons.auto_awesome),
+  ('Glow', Icons.auto_awesome),
+  ('Frost', Icons.auto_awesome),
+  ('Shadow', Icons.auto_awesome),
+  ('Sunset', Icons.auto_awesome),
+  ('Midnight', Icons.auto_awesome),
+  ('Retro', Icons.auto_awesome),
+  ('Polaroid', Icons.auto_awesome),
+  ('Dreamscape', Icons.auto_awesome),
+  ('Horror', Icons.auto_awesome),
+  ('Comic', Icons.auto_awesome),
+  ('Sketch', Icons.auto_awesome),
+  ('Soft Focus', Icons.auto_awesome),
+  ('Hard Light', Icons.auto_awesome),
+  ('Washed Out', Icons.auto_awesome),
+  ('Deep Contrast', Icons.auto_awesome),
+  ('Color Pop', Icons.auto_awesome),
+  ('Chromatic', Icons.auto_awesome),
 ];
 const _m = {
   'Gray': [0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0.21, 0.72, 0.07, 0, 0, 0, 0, 0, 1, 0],
@@ -27,12 +82,37 @@ const _m = {
 
 Widget applyFx(int i, Widget w) {
   final n = fxLibrary[i].$1;
-  if (n == 'None') return w;
-  if (n == 'Blur') {
-    return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: 4, sigmaY: 4), child: w);
+  if (n == 'None' || n == 'Bend') return w;
+  if (n.toLowerCase().contains('blur') || n == 'Soft Focus') {
+    final sigma = n == 'Motion Blur' ? 7.0 : n == 'Gaussian Blur' ? 5.0 : 3.0;
+    return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: w);
   }
-  return ColorFiltered(
-      colorFilter: ColorFilter.matrix(_m[n]!.map((e) => e.toDouble()).toList()), child: w);
+  final key = switch (n) {
+    'Grayscale' || 'Mono' || 'Noir' => 'Gray',
+    'Vintage' || 'Sepia' || 'Warm Film' || 'Golden Hour' || 'Polaroid' => 'Sepia',
+    'Negative' || 'Invert' => 'Invert',
+    'Brighten' => 'Bright',
+    'High Contrast' || 'Deep Contrast' => 'Contrast',
+    _ => '',
+  };
+  final matrix = key.isNotEmpty ? _m[key]!.map((e) => e.toDouble()).toList() : _presetMatrix(i);
+  return ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: w);
+}
+
+List<double> _presetMatrix(int index) {
+  final saturation = 0.35 + (index % 10) * 0.17;
+  final contrast = 0.72 + ((index ~/ 10) % 5) * 0.22;
+  final brightness = ((index % 7) - 3) * 8.0;
+  final a = 0.213 * (1 - saturation);
+  final b = 0.715 * (1 - saturation);
+  final c = 0.072 * (1 - saturation);
+  final bias = 128 * (1 - contrast) + brightness;
+  return [
+    (0.213 + 0.787 * saturation) * contrast, (0.715 - 0.715 * saturation) * contrast, (0.072 - 0.072 * saturation) * contrast, 0, bias,
+    (0.213 - 0.213 * saturation) * contrast, (0.715 + 0.285 * saturation) * contrast, (0.072 - 0.072 * saturation) * contrast, 0, bias,
+    (0.213 - 0.213 * saturation) * contrast, (0.715 - 0.715 * saturation) * contrast, (0.072 + 0.928 * saturation) * contrast, 0, bias,
+    0, 0, 0, 1, 0,
+  ];
 }
 
 // ---------- Layers ----------
@@ -50,7 +130,7 @@ class Layer {
   final bool isMesh;
   String text;
   Offset pos;
-  double scale = 1, rot = 0, opacity = 1, fontSize = 30, start = 0, end = 1;
+  double scale = 1, rot = 0, opacity = 1, fontSize = 30, start = 0, end = 1, bend = 0;
   Offset pivot = const Offset(.5, .5);
   int fx = 0;
   Color color = Colors.white;
@@ -61,7 +141,7 @@ class Layer {
   Layer.mesh(this.pos) : isMesh = true, text = 'Mesh';
 
   Layer copy() => (isMesh ? Layer.mesh(pos + const Offset(20, 20)) : Layer.text(text, pos + const Offset(20, 20)))
-    ..scale = scale ..rot = rot ..opacity = opacity ..fontSize = fontSize ..start = start ..end = end
+    ..scale = scale ..rot = rot ..opacity = opacity ..fontSize = fontSize ..start = start ..end = end ..bend = bend
     ..pivot = pivot ..fx = fx ..color = color ..bold = bold ..italic = italic
     ..flipX = flipX ..flipY = flipY ..shadow = shadow ..mesh = List.of(mesh);
 
@@ -123,7 +203,8 @@ const tabs = [
 
 // ---------- Editor ----------
 class Editor extends StatefulWidget {
-  const Editor({super.key});
+  final String projectName;
+  const Editor({super.key, this.projectName = 'Untitled project'});
   @override
   State<Editor> createState() => _EditorState();
 }
@@ -133,6 +214,7 @@ class _EditorState extends State<Editor> {
   final List<Layer> _layers = [];
   int? _sel;
   int _videoFx = 0, _tab = 0;
+  bool _pivotMode = false;
   double _vol = 1;
 
   int get _ms => _vc?.value.position.inMilliseconds ?? 0;
@@ -221,16 +303,27 @@ class _EditorState extends State<Editor> {
       );
     }
     child = applyFx(l.fx, child);
-    if (sel) {
+    if (sel && _pivotMode) {
       child = Stack(children: [
         child,
         Positioned.fill(
-          child: IgnorePointer(
+          child: LayoutBuilder(builder: (pivotContext, constraints) => GestureDetector(
+            behavior: HitTestBehavior.translucent,
+            onPanUpdate: (d) => setState(() {
+              l.pivot = Offset(
+                (d.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0),
+                (d.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0),
+              );
+            }),
             child: Align(
               alignment: Alignment(l.pivot.dx * 2 - 1, l.pivot.dy * 2 - 1),
-              child: const Icon(Icons.adjust, size: 16, color: Colors.redAccent),
+              child: Container(
+                width: 22, height: 22,
+                decoration: BoxDecoration(color: const Color(0xFF8B5CF6), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                child: const Icon(Icons.open_with, size: 13, color: Colors.white),
+              ),
             ),
-          ),
+          )),
         ),
       ]);
     }
@@ -238,12 +331,14 @@ class _EditorState extends State<Editor> {
       left: l.pos.dx, top: l.pos.dy,
       child: GestureDetector(
         onTap: () => setState(() => _sel = i),
+        onDoubleTap: () => setState(() { _sel = i; _pivotMode = !_pivotMode; }),
         onPanUpdate: (d) => _ed(l, () { _sel = i; l.pos += d.delta; }),
         child: Opacity(
           opacity: l.opacity.clamp(0, 1),
           child: Transform(
             alignment: al,
             transform: Matrix4.identity()
+              ..setEntry(1, 0, l.bend)
               ..rotateZ(l.rot)
               ..multiply(Matrix4.diagonal3Values(
                   l.scale * (l.flipX ? -1 : 1), l.scale * (l.flipY ? -1 : 1), 1)),
@@ -328,13 +423,15 @@ class _EditorState extends State<Editor> {
           itemCount: tabs.length,
           itemBuilder: (_, i) => InkWell(
             onTap: () => setState(() => _tab = i),
-            child: Container(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
               width: 74,
               decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(
-                      color: _tab == i ? Colors.indigo : Colors.transparent, width: 3))),
+                      color: _tab == i ? const Color(0xFF8B5CF6) : Colors.transparent, width: 3))),
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(tabs[i].$2, color: _tab == i ? Colors.indigo : null),
+                Icon(tabs[i].$2, color: _tab == i ? const Color(0xFFB69CFF) : Colors.white54),
                 Text(tabs[i].$1, style: const TextStyle(fontSize: 11)),
               ]),
             ),
@@ -350,6 +447,8 @@ class _EditorState extends State<Editor> {
       final cur = l?.fx ?? _videoFx;
       return [
         Text('Applies to: ${l == null ? 'video' : 'selected layer'}'),
+        if (l != null && fxLibrary[cur].$1 == 'Bend')
+          _s(l, 'Bend amount', l.bend, -0.8, 0.8, (v) => l.bend = v),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (int i = 0; i < fxLibrary.length; i++)
@@ -501,9 +600,11 @@ class _EditorState extends State<Editor> {
 
   Widget _panel() {
     final l = _sel == null ? null : _layers[_sel!];
-    return Column(children: [
+    return Container(
+      color: const Color(0xFF111321),
+      child: Column(children: [
       _tabBar(),
-      const Divider(height: 1),
+      const Divider(height: 1, color: Colors.white10),
       Expanded(
         child: ListView(padding: const EdgeInsets.all(12), children: [
           if (_vc != null) _track('Video', Colors.blue.shade100, 0, 1),
@@ -518,7 +619,7 @@ class _EditorState extends State<Editor> {
           ..._body(l),
         ]),
       ),
-    ]);
+    ]));
   }
 
   Widget _tool(IconData icon, String label, VoidCallback onTap) => InkWell(
@@ -532,7 +633,7 @@ class _EditorState extends State<Editor> {
       );
 
   Widget _toolbar() => Container(
-        decoration: const BoxDecoration(border: Border(top: BorderSide(color: Colors.black12))),
+        decoration: const BoxDecoration(color: Color(0xFF111321), border: Border(top: BorderSide(color: Colors.white10))),
         child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
           _tool(Icons.add, 'Add', _pickVideo),
           _tool(Icons.title, 'Text', _addText),
@@ -544,8 +645,12 @@ class _EditorState extends State<Editor> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('My project'),
+        backgroundColor: const Color(0xFF0D0F1B),
+        foregroundColor: Colors.white,
+        elevation: 0,
+        title: Text(widget.projectName, style: const TextStyle(fontWeight: FontWeight.w800, letterSpacing: -.3)),
         actions: [
+          if (_pivotMode) const Padding(padding: EdgeInsets.only(right: 8), child: Center(child: Text('PIVOT MODE · drag the purple handle', style: TextStyle(color: Color(0xFF43D9D2), fontSize: 11)))),
           TextButton(
             onPressed: () => ScaffoldMessenger.of(context)
                 .showSnackBar(const SnackBar(content: Text('Export coming soon'))),
