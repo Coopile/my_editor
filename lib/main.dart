@@ -833,6 +833,75 @@ class _EditorState extends State<Editor> {
     }
   }
 
+  String? _exportLayerFilter(Layer layer) {
+    final name = fxLibrary[layer.fx].$1;
+    final strength = layer.fxStrength.clamp(0.0, 2.0).toDouble();
+    final speed = layer.fxSpeed.clamp(.2, 3.0).toDouble();
+    switch (name) {
+      case 'None':
+      case 'Bend':
+      case 'Shake':
+      case 'Spin':
+        return null;
+      case 'Zoom Pulse':
+        return 'scale=iw*1.08:ih*1.08';
+      case 'Glitch':
+      case 'RGB Split':
+      case 'Chromatic':
+        return "rgbashift=rh='sin(t*" +
+            (42 * speed).toStringAsFixed(2) + ")*" +
+            (5 * strength).toStringAsFixed(2) +
+            "':bh='-sin(t*" + (37 * speed).toStringAsFixed(2) +
+            ")*" + (5 * strength).toStringAsFixed(2) + "'";
+      case 'Flash':
+        return "eq=brightness='if(lt(mod(t," +
+            (0.5 / speed).toStringAsFixed(3) + "),0.08)," +
+            (0.65 * strength).toStringAsFixed(3) + ",0)'";
+      case 'Glow':
+        return 'gblur=sigma=' + (2.5 * strength).toStringAsFixed(2);
+      case 'Vignette':
+        return 'vignette=PI/4';
+      case 'Film Grain':
+        return 'noise=alls=' + (18 * strength).round().toString() + ':allf=t+u';
+      case 'Pixelate':
+        return 'scale=iw/16:ih/16:flags=neighbor,scale=iw*16:ih*16:flags=neighbor';
+      case 'Soft Blur':
+      case 'Dream Blur':
+      case 'Gaussian Blur':
+      case 'Motion Blur':
+      case 'Soft Focus':
+        return 'gblur=sigma=' + (2.5 * strength).toStringAsFixed(2);
+      case 'Grayscale':
+      case 'Mono':
+      case 'Noir':
+      case 'Desaturate':
+        return 'hue=s=0';
+      case 'Negative':
+      case 'Invert':
+        return 'negate';
+      case 'Vintage':
+      case 'Sepia':
+      case 'Warm Film':
+      case 'Golden Hour':
+      case 'Polaroid':
+        return 'colorchannelmixer=.393:.769:.189:0:.349:.686:.168:0:.272:.534:.131';
+      case 'Brighten':
+        return 'eq=brightness=0.16';
+      case 'Darken':
+        return 'eq=brightness=-0.16';
+      case 'High Contrast':
+      case 'Deep Contrast':
+        return 'eq=contrast=1.45:saturation=1.15';
+      case 'Neon':
+        return 'eq=saturation=1.8:contrast=1.25,unsharp=5:5:0.8';
+      case 'Frost':
+      case 'Arctic':
+        return 'colorbalance=bs=0.18:gs=0.04';
+      default:
+        return null;
+    }
+  }
+
   Future<void> _exportVideo() async {
     final source = _videoPath;
     if (source == null || !File(source).existsSync()) {
@@ -908,8 +977,29 @@ class _EditorState extends State<Editor> {
         final start = (layer.start * totalDuration - trimStart).clamp(0.0, clipDuration);
         final end = (layer.end * totalDuration - trimStart).clamp(0.0, clipDuration);
         if (end <= start) continue;
-        graph.add('[$inputIndex:v]scale=$imageWidth:-1[$imageLabel]');
-        graph.add('[$currentVideo][$imageLabel]overlay=x=$x:y=$y:enable=\'between(t,$start,$end)\'[$nextLabel]');
+        final photoFilters = <String>['scale=$imageWidth:-1'];
+        final layerEffect = _exportLayerFilter(layer);
+        if (layerEffect != null && layerEffect.isNotEmpty) {
+          photoFilters.add(layerEffect);
+        }
+        if (layer.rot.abs() > .001) {
+          photoFilters.add('rotate=' + layer.rot.toStringAsFixed(4) + ':ow=rotw(iw):oh=roth(ih):c=none');
+        }
+        photoFilters
+          ..add('format=rgba')
+          ..add('colorchannelmixer=aa=' + layer.opacity.clamp(0.0, 1.0).toDouble().toStringAsFixed(3));
+        graph.add('[' + inputIndex.toString() + ':v]' + photoFilters.join(',') + '[' + imageLabel + ']');
+        final effectName = fxLibrary[layer.fx].$1;
+        final shakeX = effectName == 'Shake'
+            ? '+sin(t*' + (32 * layer.fxSpeed).toStringAsFixed(2) + ')*' + (10 * layer.fxStrength).toStringAsFixed(2)
+            : '';
+        final shakeY = effectName == 'Shake'
+            ? '+cos(t*' + (27 * layer.fxSpeed).toStringAsFixed(2) + ')*' + (7 * layer.fxStrength).toStringAsFixed(2)
+            : '';
+        graph.add(
+          '[' + currentVideo + '][' + imageLabel + ']overlay=x=\'' + x.toString() + shakeX +
+          '\':y=\'' + y.toString() + shakeY + '\':enable=\'between(t,' + start.toString() + ',' + end.toString() + ')\'[' + nextLabel + ']',
+        );
         currentVideo = nextLabel;
       }
 
@@ -923,8 +1013,25 @@ class _EditorState extends State<Editor> {
         final fontSize = (layer.fontSize * scale).round().clamp(10, 260);
         final colorHex = layer.color.value.toRadixString(16).padLeft(8, '0').substring(2);
         final text = _filterText(layer.text);
+        final textAlpha = layer.opacity.clamp(0.0, 1.0).toDouble();
+        final textFx = fxLibrary[layer.fx].$1;
+        final textX = textFx == 'Shake'
+            ? '\'' + x.toString() + '+sin(t*' + (32 * layer.fxSpeed).toStringAsFixed(2) +
+                ')*' + (10 * layer.fxStrength).toStringAsFixed(2) + '\''
+            : x.toString();
+        final textY = textFx == 'Shake'
+            ? '\'' + y.toString() + '+cos(t*' + (27 * layer.fxSpeed).toStringAsFixed(2) +
+                ')*' + (7 * layer.fxStrength).toStringAsFixed(2) + '\''
+            : y.toString();
+        final alpha = textFx == 'Flash'
+            ? ':alpha=\'if(lt(mod(t,0.5),0.08),1,' + textAlpha.toStringAsFixed(3) + ')\''
+            : '';
         graph.add(
-          '[$currentVideo]drawtext=text=\'$text\':fontcolor=0x$colorHex:fontsize=$fontSize:x=$x:y=$y:borderw=2:bordercolor=black@0.45:enable=\'between(t,$start,$end)\'[$nextLabel]',
+          '[' + currentVideo + ']drawtext=text=\'' + text +
+          '\':fontcolor=0x' + colorHex + '@' + textAlpha.toStringAsFixed(3) +
+          ':fontsize=' + fontSize.toString() + ':x=' + textX + ':y=' + textY +
+          ':borderw=2:bordercolor=black@0.45' + alpha +
+          ':enable=\'between(t,' + start.toString() + ',' + end.toString() + ')\'[' + nextLabel + ']',
         );
         currentVideo = nextLabel;
       }
@@ -963,7 +1070,7 @@ class _EditorState extends State<Editor> {
       } else {
         command.write('-an ');
       }
-      command.write('-c:v mpeg4 -q:v 2 -pix_fmt yuv420p -movflags +faststart ${_ffArg(outputPath)}');
+      command.write('-c:v h264_videotoolbox -b:v 6M -pix_fmt yuv420p -movflags +faststart ${_ffArg(outputPath)}');
 
       final session = await FFmpegKit.execute(command.toString());
       final returnCode = await session.getReturnCode();
