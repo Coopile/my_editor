@@ -719,6 +719,20 @@ class _EditorState extends State<Editor> {
     });
   }
 
+  Future<void> _removeVideo() async {
+    await _vc?.pause();
+    await _pauseAudio();
+    await _vc?.dispose();
+    if (!mounted) return;
+    setState(() {
+      _vc = null;
+      _videoPath = null;
+      _trimStart = 0;
+      _trimEnd = 0;
+      _lastAudioSyncBucket = -1;
+    });
+  }
+
   void _deleteAudio(AudioTrack track) {
     setState(() => _audioTracks.remove(track));
     track.player.dispose();
@@ -1346,6 +1360,7 @@ class _EditorState extends State<Editor> {
                     _trimEnd.clamp(_trimStart, duration).toDouble(),
                   ),
                   max: duration,
+                  onDelete: _removeVideo,
                   onChanged: (range) {
                     setState(() {
                       _trimStart = range.start;
@@ -1568,8 +1583,33 @@ class _EditorState extends State<Editor> {
           ]),
         ),
         const SizedBox(height: 12),
+        const Text('QUICK SOUND EFFECTS', style: TextStyle(fontSize: 9, letterSpacing: 1.2, color: Colors.white38, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Wrap(spacing: 7, runSpacing: 7, children: [
+          ActionChip(
+            avatar: const Icon(Icons.bubble_chart_rounded, size: 15),
+            label: const Text('Pop'),
+            onPressed: () => _addSoundEffect('Pop'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.air_rounded, size: 15),
+            label: const Text('Whoosh'),
+            onPressed: () => _addSoundEffect('Whoosh'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.touch_app_rounded, size: 15),
+            label: const Text('Click'),
+            onPressed: () => _addSoundEffect('Click'),
+          ),
+          ActionChip(
+            avatar: const Icon(Icons.trending_up_rounded, size: 15),
+            label: const Text('Riser'),
+            onPressed: () => _addSoundEffect('Riser'),
+          ),
+        ]),
+        const SizedBox(height: 12),
         Row(children: [
-          const Expanded(child: Text('AUDIO & SOUND EFFECTS', style: TextStyle(fontSize: 9, letterSpacing: 1.2, color: Colors.white38, fontWeight: FontWeight.w800))),
+          const Expanded(child: Text('AUDIO LIBRARY', style: TextStyle(fontSize: 9, letterSpacing: 1.2, color: Colors.white38, fontWeight: FontWeight.w800))),
           FilledButton.icon(
             onPressed: _addAudio,
             icon: const Icon(Icons.add, size: 16),
