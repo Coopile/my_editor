@@ -785,6 +785,7 @@ class _EditorState extends State<Editor> {
       .replaceAll('%', r'\%')
       .replaceAll('[', r'\[')
       .replaceAll(']', r'\]')
+      .replaceAll(';', r'\;')
       .replaceAll('\n', r'\n');
 
   String _exportEffectFilter() {
@@ -1091,7 +1092,7 @@ class _EditorState extends State<Editor> {
       } else {
         command.write('-an ');
       }
-      command.write('-c:v h264_videotoolbox -b:v 6M -pix_fmt yuv420p -movflags +faststart ${_ffArg(outputPath)}');
+      command.write('-c:v h264_videotoolbox -allow_sw 1 -b:v 6M -pix_fmt yuv420p -movflags +faststart ${_ffArg(outputPath)}');
 
       final session = await FFmpegKit.execute(command.toString());
       final returnCode = await session.getReturnCode();
