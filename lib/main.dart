@@ -245,7 +245,7 @@ class _GrainPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final random = math.Random(time.floor() + 17);
     final paint = Paint()..strokeWidth = 1;
-    final count = (size.width * size.height / 180 * strength).round().clamp(0, 2200);
+    final count = (size.width * size.height / 180 * strength).round().clamp(0, 2200).toInt();
     for (int i = 0; i < count; i++) {
       paint.color = (i.isEven ? Colors.white : Colors.black)
           .withOpacity(.12 + random.nextDouble() * .2);
@@ -465,7 +465,7 @@ class _EditorState extends State<Editor> {
       _layers
         ..clear()
         ..addAll(previous.map((layer) => layer.snapshot()));
-      _sel = _layers.isEmpty ? null : (_sel ?? 0).clamp(0, _layers.length - 1);
+      _sel = _layers.isEmpty ? null : (_sel ?? 0).clamp(0, _layers.length - 1).toInt();
     });
   }
 
@@ -501,7 +501,7 @@ class _EditorState extends State<Editor> {
       final startMs = (track.start * _videoDuration * 1000).round();
       final endMs = (track.end * _videoDuration * 1000).round();
       if (now * 1000 >= startMs && now * 1000 < endMs) {
-        final offset = Duration(milliseconds: (_ms - startMs).clamp(0, 1 << 30));
+        final offset = Duration(milliseconds: (_ms - startMs).clamp(0, 1 << 30).toInt());
         if (track.player.state != PlayerState.playing) {
           await track.player.play(
             DeviceFileSource(track.path),
@@ -582,7 +582,7 @@ class _EditorState extends State<Editor> {
     }
     setState(() => _audioTracks.add(track));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Added audio: \${track.title}')),
+      SnackBar(content: Text('Added audio: ${track.title}')),
     );
   }
 
@@ -646,7 +646,7 @@ class _EditorState extends State<Editor> {
   }
 
   String _ffArg(String value) =>
-      '"\${value.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
+      '"${value.replaceAll(r'\', r'\\').replaceAll('"', r'\"')}"';
 
   String _filterText(String value) => value
       .replaceAll(r'\', r'\\')
@@ -664,22 +664,22 @@ class _EditorState extends State<Editor> {
     switch (name) {
       case 'Shake':
         final drift = (.025 * amount).toStringAsFixed(4);
-        return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*\${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*\${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
+        return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
       case 'Zoom Pulse':
-        return "scale=iw*(1+0.045*sin(t*\${6 * speed})):ih*(1+0.045*sin(t*\${6 * speed})):eval=frame,crop=iw/1.045:ih/1.045";
+        return 'scale=iw*1.08:ih*1.08,crop=iw/1.08:ih/1.08';
       case 'Spin':
-        return "rotate='0.025*sin(t*\${2.4 * speed})':c=black@0";
+        return "rotate='0.025*sin(t*${2.4 * speed})':c=black@0";
       case 'Glitch':
       case 'RGB Split':
-        return "rgbashift=rh='sin(t*\${42 * speed})*\${(5 * amount).toStringAsFixed(2)}':bh='-sin(t*\${37 * speed})*\${(5 * amount).toStringAsFixed(2)}'";
+        return "rgbashift=rh='sin(t*${42 * speed})*${(5 * amount).toStringAsFixed(2)}':bh='-sin(t*${37 * speed})*${(5 * amount).toStringAsFixed(2)}'";
       case 'Flash':
-        return "eq=brightness='if(lt(mod(t,\${(0.5 / speed).toStringAsFixed(3)}),0.08),\${(0.65 * amount).toStringAsFixed(3)},0)'";
+        return "eq=brightness='if(lt(mod(t,${(0.5 / speed).toStringAsFixed(3)}),0.08),${(0.65 * amount).toStringAsFixed(3)},0)'";
       case 'Glow':
-        return "gblur=sigma=\${(2.5 * amount).toStringAsFixed(2)}";
+        return "gblur=sigma=${(2.5 * amount).toStringAsFixed(2)}";
       case 'Vignette':
         return "vignette=PI/4";
       case 'Film Grain':
-        return "noise=alls=\${(18 * amount).round()}:allf=t+u";
+        return "noise=alls=${(18 * amount).round()}:allf=t+u";
       case 'Pixelate':
         return "scale=iw/16:ih/16:flags=neighbor,scale=iw*16:ih*16:flags=neighbor";
       case 'Soft Blur':
@@ -687,7 +687,7 @@ class _EditorState extends State<Editor> {
       case 'Gaussian Blur':
       case 'Motion Blur':
       case 'Soft Focus':
-        return "gblur=sigma=\${(2.5 * amount).toStringAsFixed(2)}";
+        return "gblur=sigma=${(2.5 * amount).toStringAsFixed(2)}";
       case 'Grayscale':
       case 'Mono':
       case 'Noir':
@@ -719,7 +719,7 @@ class _EditorState extends State<Editor> {
       default:
         final saturation = .8 + (_videoFx % 5) * .18;
         final contrast = .92 + ((_videoFx ~/ 5) % 4) * .08;
-        return 'eq=contrast=\${contrast.toStringAsFixed(2)}:saturation=\${saturation.toStringAsFixed(2)}';
+        return 'eq=contrast=${contrast.toStringAsFixed(2)}:saturation=${saturation.toStringAsFixed(2)}';
     }
   }
 
@@ -738,12 +738,12 @@ class _EditorState extends State<Editor> {
 
     try {
       final totalDuration = _videoDuration;
-      final trimStart = _trimStart.clamp(0.0, totalDuration);
-      final trimEnd = _trimEnd.clamp(trimStart + .05, totalDuration);
+      final trimStart = _trimStart.clamp(0.0, math.max(0.0, totalDuration - .05)).toDouble();
+      final trimEnd = _trimEnd.clamp(trimStart + .05, totalDuration).toDouble();
       final clipDuration = trimEnd - trimStart;
       final outputDir = await getApplicationDocumentsDirectory();
       final outputPath =
-          '\${outputDir.path}/EditShift_\${DateTime.now().millisecondsSinceEpoch}.mp4';
+          '${outputDir.path}/EditShift_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
       var sourceHasAudio = false;
       try {
@@ -765,23 +765,23 @@ class _EditorState extends State<Editor> {
           layer.start * totalDuration < trimEnd).toList();
 
       final command = StringBuffer();
-      command.write('-ss \${trimStart.toStringAsFixed(3)} -i \${_ffArg(source)} ');
+      command.write('-ss ${trimStart.toStringAsFixed(3)} -i ${_ffArg(source)} ');
       for (final layer in imageLayers) {
-        command.write('-loop 1 -i \${_ffArg(layer.imagePath!)} ');
+        command.write('-loop 1 -i ${_ffArg(layer.imagePath!)} ');
       }
       for (final track in _audioTracks) {
-        command.write('-i \${_ffArg(track.path)} ');
+        command.write('-i ${_ffArg(track.path)} ');
       }
 
       final videoFilters = <String>[];
       final effect = _exportEffectFilter();
       if (effect.isNotEmpty) videoFilters.add(effect);
       videoFilters.add(
-        'eq=brightness=\${_brightness.toStringAsFixed(3)}:contrast=\${_contrast.toStringAsFixed(3)}:saturation=\${_saturation.toStringAsFixed(3)}',
+        'eq=brightness=${_brightness.toStringAsFixed(3)}:contrast=${_contrast.toStringAsFixed(3)}:saturation=${_saturation.toStringAsFixed(3)}',
       );
 
       final graph = <String>[];
-      graph.add('[0:v]\${videoFilters.join(',')}[v0]');
+      graph.add('[0:v]${videoFilters.join(',')}[v0]');
       var currentVideo = 'v0';
       var outputNumber = 0;
       final videoSize = _vc?.value.size ?? const Size(1280, 720);
@@ -791,7 +791,7 @@ class _EditorState extends State<Editor> {
         final layer = imageLayers[i];
         final inputIndex = i + 1;
         final imageLabel = 'image$i';
-        final nextLabel = 'v\${++outputNumber}';
+        final nextLabel = 'v${++outputNumber}';
         final imageWidth = (190 * layer.scale * scale).round().clamp(24, 4096);
         final x = (layer.pos.dx * scale).round();
         final y = (layer.pos.dy * scale).round();
@@ -804,7 +804,7 @@ class _EditorState extends State<Editor> {
       }
 
       for (final layer in textLayers) {
-        final nextLabel = 'v\${++outputNumber}';
+        final nextLabel = 'v${++outputNumber}';
         final start = (layer.start * totalDuration - trimStart).clamp(0.0, clipDuration);
         final end = (layer.end * totalDuration - trimStart).clamp(0.0, clipDuration);
         if (end <= start) continue;
@@ -822,7 +822,7 @@ class _EditorState extends State<Editor> {
       final audioInputStart = 1 + imageLayers.length;
       final audioLabels = <String>[];
       if (sourceHasAudio) {
-        graph.add('[0:a]volume=\${_vol.toStringAsFixed(3)}[baseaudio]');
+        graph.add('[0:a]volume=${_vol.toStringAsFixed(3)}[baseaudio]');
         audioLabels.add('[baseaudio]');
       }
       for (int i = 0; i < _audioTracks.length; i++) {
@@ -834,26 +834,26 @@ class _EditorState extends State<Editor> {
         final delay = (start * 1000).round();
         final length = (end - start).toStringAsFixed(3);
         final label = 'audio$i';
-        graph.add('[$inputIndex:a]atrim=duration=$length,asetpts=PTS-STARTPTS,adelay=$delay|$delay,volume=\${track.volume.toStringAsFixed(3)}[$label]');
+        graph.add('[$inputIndex:a]atrim=duration=$length,asetpts=PTS-STARTPTS,adelay=$delay|$delay,volume=${track.volume.toStringAsFixed(3)}[$label]');
         audioLabels.add('[$label]');
       }
 
       graph.add('[$currentVideo]null[vout]');
       if (audioLabels.length > 1) {
-        graph.add('\${audioLabels.join()}amix=inputs=\${audioLabels.length}:duration=longest:dropout_transition=2[aout]');
+        graph.add('${audioLabels.join()}amix=inputs=${audioLabels.length}:duration=longest:dropout_transition=2[aout]');
       } else if (audioLabels.length == 1) {
-        graph.add('\${audioLabels.single}anull[aout]');
+        graph.add('${audioLabels.single}anull[aout]');
       }
 
-      command.write('-t \${clipDuration.toStringAsFixed(3)} ');
-      command.write('-filter_complex "\${graph.join(';')}" ');
+      command.write('-t ${clipDuration.toStringAsFixed(3)} ');
+      command.write('-filter_complex "${graph.join(';')}" ');
       command.write('-map "[vout]" ');
       if (audioLabels.isNotEmpty) {
         command.write('-map "[aout]" -c:a aac -b:a 192k ');
       } else {
         command.write('-an ');
       }
-      command.write('-c:v mpeg4 -q:v 2 -pix_fmt yuv420p -movflags +faststart \${_ffArg(outputPath)}');
+      command.write('-c:v mpeg4 -q:v 2 -pix_fmt yuv420p -movflags +faststart ${_ffArg(outputPath)}');
 
       final session = await FFmpegKit.execute(command.toString());
       final returnCode = await session.getReturnCode();
@@ -875,7 +875,7 @@ class _EditorState extends State<Editor> {
         final message = error.toString();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Export failed: \${message.length > 220 ? message.substring(0, 220) : message}'),
+            content: Text('Export failed: ${message.length > 220 ? message.substring(0, 220) : message}'),
             duration: const Duration(seconds: 7),
           ),
         );
@@ -976,7 +976,7 @@ class _EditorState extends State<Editor> {
         onDoubleTap: () => setState(() { _sel = i; _pivotMode = !_pivotMode; }),
         onPanUpdate: (d) => _ed(l, () { _sel = i; l.pos += d.delta; }),
         child: Opacity(
-          opacity: l.opacity.clamp(0, 1),
+          opacity: l.opacity.clamp(0, 1).toDouble(),
           child: Transform(
             alignment: al,
             transform: Matrix4.identity()
@@ -1083,7 +1083,7 @@ class _EditorState extends State<Editor> {
   Widget _s(Layer l, String t, double v, double mn, double mx, void Function(double) f) =>
       Row(children: [
         SizedBox(width: 72, child: Text(t, style: const TextStyle(fontSize: 13))),
-        Expanded(child: Slider(value: v.clamp(mn, mx), min: mn, max: mx, onChanged: (x) => _ed(l, () => f(x)))),
+        Expanded(child: Slider(value: v.clamp(mn, mx).toDouble(), min: mn, max: mx, onChanged: (x) => _ed(l, () => f(x)))),
       ]);
 
   Widget _globalS(
@@ -1109,7 +1109,7 @@ class _EditorState extends State<Editor> {
           SizedBox(
             width: 38,
             child: Text(
-              '\${value.toStringAsFixed(1)}$suffix',
+              '${value.toStringAsFixed(1)}$suffix',
               textAlign: TextAlign.end,
               style: const TextStyle(color: Colors.white54, fontSize: 10),
             ),
@@ -1293,7 +1293,7 @@ class _EditorState extends State<Editor> {
                 ),
               for (final track in _audioTracks)
                 _timelineTrack(
-                  title: 'Audio · \${track.title}',
+                  title: 'Audio · ${track.title}',
                   icon: Icons.graphic_eq_rounded,
                   accent: const Color(0xFF62C9FF),
                   values: RangeValues(track.start, track.end),
@@ -1471,7 +1471,7 @@ class _EditorState extends State<Editor> {
                 setState(() => _vol = v);
                 _vc?.setVolume(v);
               })),
-              Text('\${(_vol * 100).round()}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
+              Text('${(_vol * 100).round()}%', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)),
             ]),
           ]),
         ),
@@ -1521,7 +1521,7 @@ class _EditorState extends State<Editor> {
                   setState(() => track.volume = v);
                   track.player.setVolume(v);
                 })),
-                Text('\${(track.volume * 100).round()}%', style: const TextStyle(fontSize: 10)),
+                Text('${(track.volume * 100).round()}%', style: const TextStyle(fontSize: 10)),
               ]),
             ]),
           ),
@@ -1657,7 +1657,7 @@ class _EditorState extends State<Editor> {
               l.end = range.end;
             }),
           ),
-          Text('\${(l.start * 100).round()}% — \${(l.end * 100).round()}%',
+          Text('${(l.start * 100).round()}% — ${(l.end * 100).round()}%',
               style: const TextStyle(color: Colors.white54, fontSize: 10)),
         ];
       default:
@@ -1742,7 +1742,7 @@ class _EditorState extends State<Editor> {
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800),
                     )),
-                    Text('LAYER \${_sel! + 1}', style: const TextStyle(fontSize: 8, color: Colors.white60, letterSpacing: 1)),
+                    Text('LAYER ${_sel! + 1}', style: const TextStyle(fontSize: 8, color: Colors.white60, letterSpacing: 1)),
                   ]),
                 ),
               ..._body(layer),
