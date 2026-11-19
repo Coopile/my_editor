@@ -87,7 +87,6 @@ const fxLibrary = [
   ('Glitch', Icons.broken_image),
   ('RGB Split', Icons.filter_b_and_w),
   ('Flash', Icons.flash_on),
-  ('Glow', Icons.wb_sunny),
   ('Vignette', Icons.lens_blur),
   ('Film Grain', Icons.grain),
   ('Pixelate', Icons.grid_on),
@@ -585,7 +584,8 @@ class _EditorState extends State<Editor> {
   Future<void> _addAudio() async {
     final picked = await FilePicker.pickFile(type: FileType.audio);
     if (picked == null || picked.path == null) return;
-    final track = AudioTrack(path: picked.path!, title: picked.name);
+    final track = AudioTrack(path: picked.path!, title: picked.name)
+      ..start = _t.clamp(0.0, 1.0).toDouble();
     await track.player.setSourceDeviceFile(track.path);
     if (!mounted) {
       await track.player.dispose();
@@ -662,10 +662,14 @@ class _EditorState extends State<Editor> {
   Future<void> _addSoundEffect(String kind) async {
     final directory = await getTemporaryDirectory();
     final safeName = kind.toLowerCase().replaceAll(' ', '_');
-    final path = '\${directory.path}/editshift_\${safeName}_\${DateTime.now().microsecondsSinceEpoch}.wav';
+    final path = '${directory.path}/editshift_${safeName}_${DateTime.now().microsecondsSinceEpoch}.wav';
     final file = File(path);
     await file.writeAsBytes(_makeSfxWave(kind), flush: true);
-    final track = AudioTrack(path: path, title: 'EditShift $kind');
+    final effectDuration = switch (kind) { 'Click' => .075, 'Pop' => .24, 'Whoosh' => .8, _ => 1.0 };
+    final start = _t.clamp(0.0, 1.0).toDouble();
+    final track = AudioTrack(path: path, title: 'EditShift $kind')
+      ..start = start
+      ..end = (start + effectDuration / _videoDuration).clamp(start, 1.0).toDouble();
     await track.player.setSourceDeviceFile(path);
     if (!mounted) {
       await track.player.dispose();
