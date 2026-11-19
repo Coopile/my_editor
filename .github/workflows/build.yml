@@ -9,12 +9,24 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
-      - run: |
-          mkdir Payload
-          cp -r build/ios/iphoneos/Runner.app Payload/
+      - name: Build unsigned iOS device app
+        run: |
+          set -o pipefail
+          flutter build ios --release --no-codesign --verbose 2>&1 | tee flutter-ios-build.log
+      - name: Package device app as IPA
+        run: |
+          test -d build/ios/iphoneos/Runner.app
+          mkdir -p Payload
+          cp -R build/ios/iphoneos/Runner.app Payload/
           zip -r app.ipa Payload
       - uses: actions/upload-artifact@v4
         with:
           name: app-ipa
           path: app.ipa
+      - name: Upload iOS build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-build-diagnostics
+          path: flutter-ios-build.log
+          if-no-files-found: ignore
