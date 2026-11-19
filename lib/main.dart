@@ -81,6 +81,7 @@ const _m = {
 
 Widget applyFx(int i, Widget w) {
   final n = fxLibrary[i].$1;
+  if (n == 'Bend') return w;
   if (n.toLowerCase().contains('blur') || n == 'Soft Focus') {
     final sigma = n == 'Motion Blur' ? 7.0 : n == 'Gaussian Blur' ? 5.0 : 3.0;
     return ImageFiltered(imageFilter: ui.ImageFilter.blur(sigmaX: sigma, sigmaY: sigma), child: w);
@@ -105,7 +106,7 @@ class Layer {
   final bool isMesh;
   String text;
   Offset pos;
-  double scale = 1, rot = 0, opacity = 1, fontSize = 30, start = 0, end = 1;
+  double scale = 1, rot = 0, opacity = 1, fontSize = 30, start = 0, end = 1, bend = 0;
   Offset pivot = const Offset(.5, .5);
   int fx = 0;
   Color color = Colors.white;
@@ -419,6 +420,8 @@ class _EditorState extends State<Editor> {
       final cur = l?.fx ?? _videoFx;
       return [
         Text('Applies to: ${l == null ? 'video' : 'selected layer'}'),
+        if (l != null && fxLibrary[cur].$1 == 'Bend')
+          _s(l, 'Bend amount', l.bend, -0.8, 0.8, (v) => l.bend = v),
         const SizedBox(height: 8),
         Wrap(spacing: 8, runSpacing: 8, children: [
           for (int i = 0; i < fxLibrary.length; i++)
