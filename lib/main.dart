@@ -2159,6 +2159,140 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     }
   }
 
+
+  void _moveLayerKeyframe(int layerIndex, int oldTime, int newTime) {
+    if (layerIndex < 0 || layerIndex >= _layers.length) return;
+    final layer = _layers[layerIndex];
+    final keyIndex = layer.kfs.indexWhere((key) => (key.t - oldTime).abs() < 36);
+    if (keyIndex < 0) return;
+    final limit = ((_vc?.value.duration.inMilliseconds ?? (_videoDuration * 1000).round())).toInt();
+    setState(() {
+      layer.kfs[keyIndex].t = newTime.clamp(0, math.max(1, limit)).toInt();
+      layer.kfs.sort((a, b) => a.t.compareTo(b.t));
+    });
+  }
+
+  Future<void> _openInspectorSheet() async {
+    if (!mounted) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF111214),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
+      builder: (sheetContext) => SizedBox(
+        height: MediaQuery.of(sheetContext).size.height * .68,
+        child: _panel(),
+      ),
+    );
+  }
+
+  Future<void> _showLayerActions(int index) async {
+    if (index < 0 || index >= _layers.length) return;
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF151719),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          ListTile(leading: const Icon(Icons.tune_rounded), title: const Text('Edit properties'), onTap: () => Navigator.pop(sheetContext, 'edit')),
+          ListTile(leading: const Icon(Icons.copy_rounded), title: const Text('Duplicate layer'), onTap: () => Navigator.pop(sheetContext, 'duplicate')),
+          ListTile(leading: const Icon(Icons.keyboard_arrow_up_rounded), title: const Text('Move layer up'), onTap: () => Navigator.pop(sheetContext, 'up')),
+          ListTile(leading: const Icon(Icons.keyboard_arrow_down_rounded), title: const Text('Move layer down'), onTap: () => Navigator.pop(sheetContext, 'down')),
+          ListTile(leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent), title: const Text('Delete layer'), onTap: () => Navigator.pop(sheetContext, 'delete')),
+        ]),
+      ),
+    );
+    if (!mounted || action == null || index >= _layers.length) return;
+    setState(() => _sel = index);
+    switch (action) {
+      case 'edit':
+        _openInspectorSheet();
+        break;
+      case 'duplicate':
+        _add(_layers[index].copy());
+        break;
+      case 'up':
+        if (index < _layers.length - 1) {
+          _pushUndo();
+          setState(() {
+            _layers.insert(index + 1, _layers.removeAt(index));
+            _sel = index + 1;
+          });
+        }
+        break;
+      case 'down':
+        if (index > 0) {
+          _pushUndo();
+          setState(() {
+            _layers.insert(index - 1, _layers.removeAt(index));
+            _sel = index - 1;
+          });
+        }
+        break;
+      case 'delete':
+        _deleteSelected();
+        break;
+    }
+  }
+
+  Future<void> _showVideoOptions() async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF151719),
+      builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.tune_rounded), title: const Text('Video settings'), onTap: () => Navigator.pop(sheetContext, 'settings')),
+        ListTile(leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent), title: const Text('Remove video'), onTap: () => Navigator.pop(sheetContext, 'remove')),
+      ])),
+    );
+    if (action == 'settings') {
+      _tab = tabs.indexWhere((tab) => tab.$1 == 'Adjust');
+      _openInspectorSheet();
+    } else if (action == 'remove') {
+      _removeVideo();
+    }
+  }
+
+  Future<void> _showAudioOptions(AudioTrack track) async {
+    final action = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF151719),
+      builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.volume_up_rounded), title: const Text('Audio settings'), onTap: () => Navigator.pop(sheetContext, 'settings')),
+        ListTile(leading: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent), title: const Text('Remove audio'), onTap: () => Navigator.pop(sheetContext, 'remove')),
+      ])),
+    );
+    if (action == 'settings') {
+      setState(() => _tab = tabs.indexWhere((tab) => tab.$1 == 'Audio'));
+      _openInspectorSheet();
+    } else if (action == 'remove') {
+      _deleteAudio(track);
+    }
+  }
+
+  Future<void> _openMediaMenu() async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: const Color(0xFF151719),
+      builder: (sheetContext) => SafeArea(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        ListTile(leading: const Icon(Icons.video_library_rounded), title: const Text('Video'), subtitle: const Text('Import a video clip'), onTap: () => Navigator.pop(sheetContext, 'video')),
+        ListTile(leading: const Icon(Icons.image_rounded), title: const Text('Photo or image'), onTap: () => Navigator.pop(sheetContext, 'photo')),
+        ListTile(leading: const Icon(Icons.music_note_rounded), title: const Text('Audio'), onTap: () => Navigator.pop(sheetContext, 'audio')),
+      ])),
+    );
+    if (choice == 'video') await _pickVideo();
+    if (choice == 'photo') await _addPhoto();
+    if (choice == 'audio') await _addAudio();
+  }
+
+  void _addSolidLayer() => _add(Layer.solid(const Offset(48, 48)));
+  void _addShapeLayer() => _add(Layer.shape(const Offset(70, 60)));
+
+  void _addAdjustmentLayer() {
+    _add(Layer.adjustment(const Offset(80, 70)));
+    setState(() => _tab = tabs.indexWhere((tab) => tab.$1 == 'Adjust'));
+    _openInspectorSheet();
+  }
+
   bool _effectMatches(int index) {
     final name = fxLibrary[index].$1.toLowerCase();
     if (_fxSearch.isNotEmpty && !name.contains(_fxSearch)) return false;
