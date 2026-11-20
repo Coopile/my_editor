@@ -21,8 +21,8 @@ void main() => runApp(MaterialApp(
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF090A12),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF8B5CF6), brightness: Brightness.dark),
+        scaffoldBackgroundColor: const Color(0xFF0B0D12),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF36DCC4), brightness: Brightness.dark),
         fontFamily: 'Roboto',
       ),
       home: const HomeScreen(),
@@ -1533,7 +1533,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       margin: const EdgeInsets.fromLTRB(4, 3, 4, 3),
       padding: const EdgeInsets.fromLTRB(8, 6, 8, 5),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(8),
         color: const Color(0xFF151A24),
         border: Border.all(color: Colors.white.withOpacity(.08)),
         boxShadow: [BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(.08), blurRadius: 18)],
@@ -1811,7 +1811,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: const Color(0xFF171D29), Color(0xFF1C2440)]),
+            color: const Color(0xFF202735),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('MAIN CLIP VOLUME', style: TextStyle(fontSize: 9, letterSpacing: 1.4, color: Colors.white60, fontWeight: FontWeight.w800)),
@@ -2221,8 +2221,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   : const Icon(Icons.ios_share_rounded, size: 16),
               label: Text(_exporting ? 'Rendering' : 'Export'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                foregroundColor: Colors.white,
+                backgroundColor: const Color(0xFF16BFA8),
+                foregroundColor: const Color(0xFF07120F),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
               ),
