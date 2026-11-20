@@ -1439,107 +1439,148 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     required double max,
     required ValueChanged<RangeValues> onChanged,
     bool selected = false,
+    bool visible = true,
+    VoidCallback? onVisibilityToggle,
     VoidCallback? onTap,
-    VoidCallback? onDelete,
+    VoidCallback? onMore,
     List<int> keyframeTimes = const [],
     ValueChanged<int>? onKeyframeTap,
+    void Function(int oldTime, int newTime)? onKeyframeMove,
   }) {
-    final low = values.start.clamp(0.0, max).toDouble();
-    final high = values.end.clamp(low, max).toDouble();
+    final safeMax = max <= 0 ? 1.0 : max;
+    final low = values.start.clamp(0.0, safeMax).toDouble();
+    final high = values.end.clamp(low, safeMax).toDouble();
     return Container(
-      height: 48,
-      margin: const EdgeInsets.only(bottom: 4),
-      decoration: BoxDecoration(
-        color: selected ? const Color(0xFF202A39) : const Color(0xFF141A26),
-        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(.045))),
-      ),
+      height: 43,
+      color: selected ? const Color(0xFF171D1B) : const Color(0xFF08090B),
       child: Row(children: [
         SizedBox(
-          width: 112,
-          child: InkWell(
-            onTap: onTap,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 5),
-              child: Row(children: [
-                Icon(icon, size: 15, color: accent),
-                const SizedBox(width: 5),
-                Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 9, color: selected ? Colors.white : Colors.white70, fontWeight: FontWeight.w700))),
-                if (onDelete != null)
-                  GestureDetector(onTap: onDelete, child: const Icon(Icons.close, size: 13, color: Colors.white38)),
-              ]),
+          width: 42,
+          child: IconButton(
+            tooltip: visible ? 'Hide layer' : 'Show layer',
+            visualDensity: VisualDensity.compact,
+            onPressed: onVisibilityToggle,
+            icon: Icon(
+              visible ? Icons.visibility_rounded : Icons.visibility_off_rounded,
+              size: 18,
+              color: visible ? Colors.white70 : Colors.white24,
             ),
           ),
         ),
         Expanded(
           child: LayoutBuilder(builder: (context, box) {
             final width = box.maxWidth;
-            final left = (low / max * width).clamp(0.0, width).toDouble();
-            final right = (high / max * width).clamp(left, width).toDouble();
+            final left = (low / safeMax * width).clamp(0.0, width).toDouble();
+            final right = (high / safeMax * width).clamp(left, width).toDouble();
             final clipWidth = math.max(18.0, right - left).toDouble();
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onTap,
-              child: Stack(children: [
-                Positioned.fill(child: Center(child: Container(height: 1, color: Colors.white10))),
-                Positioned(left: (_t.clamp(0.0, 1.0) * width).clamp(0.0, width - 1).toDouble(), top: 0, bottom: 0, width: 1, child: Container(color: const Color(0xFF36DCC4))),
-                Positioned(left: left, top: 7, width: clipWidth, height: 34,
+              onHorizontalDragUpdate: (d) {
+                final target = ((d.localPosition.dx / width).clamp(0.0, 1.0) * safeMax);
+                final span = high - low;
+                final nextStart = (target - span / 2).clamp(0.0, safeMax - span).toDouble();
+                onChanged(RangeValues(nextStart, nextStart + span));
+              },
+              child: Stack(clipBehavior: Clip.hardEdge, children: [
+                Positioned.fill(child: Center(child: Container(height: 1, color: Colors.white12))),
+                Positioned(
+                  left: (_t.clamp(0.0, 1.0) * width).clamp(0.0, width - 1).toDouble(),
+                  top: 0, bottom: 0, width: 1,
+                  child: Container(color: const Color(0xFF20E36F)),
+                ),
+                Positioned(
+                  left: left, top: 5, width: clipWidth, height: 33,
                   child: GestureDetector(
                     onTap: onTap,
                     onPanUpdate: (d) {
-                      final delta = d.delta.dx / width * max;
+                      final delta = d.delta.dx / width * safeMax;
                       final span = high - low;
-                      final nextStart = (low + delta).clamp(0.0, max - span).toDouble();
+                      final nextStart = (low + delta).clamp(0.0, safeMax - span).toDouble();
                       onChanged(RangeValues(nextStart, nextStart + span));
                     },
                     child: Container(
+                      alignment: Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                       decoration: BoxDecoration(
-                        color: accent.withOpacity(selected ? .88 : .62),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: selected ? Colors.white : accent.withOpacity(.65), width: selected ? 1.4 : .7),
+                        color: accent.withOpacity(visible ? .84 : .24),
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: selected ? const Color(0xFFB6FFCE) : accent.withOpacity(.8),
+                          width: selected ? 1.4 : .7,
+                        ),
                       ),
-                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
-                      child: Align(alignment: Alignment.centerLeft, child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w800))),
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ),
                 for (final keyTime in keyframeTimes)
                   Positioned(
-                    left: ((keyTime / 1000 / _videoDuration.clamp(.001, double.infinity)) * width - 5).clamp(0.0, width - 10).toDouble(),
-                    top: 15,
-                    width: 10,
-                    height: 10,
+                    left: ((keyTime / 1000 / _videoDuration.clamp(.001, double.infinity)) * width - 5)
+                        .clamp(0.0, width - 10).toDouble(),
+                    top: 16, width: 10, height: 10,
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: onKeyframeTap == null ? null : () => onKeyframeTap(keyTime),
+                      onHorizontalDragUpdate: onKeyframeMove == null
+                          ? null
+                          : (d) => onKeyframeMove(
+                                keyTime,
+                                (keyTime + d.delta.dx / width * _videoDuration * 1000).round(),
+                              ),
                       child: Transform.rotate(
                         angle: math.pi / 4,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: selected ? const Color(0xFFFFD76A) : Colors.white,
-                            border: Border.all(color: const Color(0xFF10141D), width: 1.2),
-                            borderRadius: BorderRadius.circular(1.5),
+                            color: selected ? const Color(0xFFFFE66D) : Colors.white,
+                            border: Border.all(color: const Color(0xFF101215), width: 1.1),
+                            borderRadius: BorderRadius.circular(1),
                           ),
                         ),
                       ),
                     ),
                   ),
-                Positioned(left: (left - 3).clamp(0.0, width - 7).toDouble(), top: 5, width: 8, height: 38,
-                  child: GestureDetector(behavior: HitTestBehavior.translucent,
-                    onPanUpdate: (d) { final delta = d.delta.dx / width * max; onChanged(RangeValues((low + delta).clamp(0.0, high - .01).toDouble(), high)); },
-                    child: Center(child: Container(width: 4, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)))),
+                Positioned(
+                  left: (left - 3).clamp(0.0, width - 7).toDouble(),
+                  top: 3, width: 8, height: 37,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onPanUpdate: (d) {
+                      final delta = d.delta.dx / width * safeMax;
+                      onChanged(RangeValues((low + delta).clamp(0.0, high - .01).toDouble(), high));
+                    },
+                    child: Center(child: Container(width: 3, height: 22, color: Colors.white)),
                   ),
                 ),
-                Positioned(left: (right - 4).clamp(0.0, width - 7).toDouble(), top: 5, width: 8, height: 38,
-                  child: GestureDetector(behavior: HitTestBehavior.translucent,
-                    onPanUpdate: (d) { final delta = d.delta.dx / width * max; onChanged(RangeValues(low, (high + delta).clamp(low + .01, max).toDouble())); },
-                    child: Center(child: Container(width: 4, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)))),
+                Positioned(
+                  left: (right - 4).clamp(0.0, width - 7).toDouble(),
+                  top: 3, width: 8, height: 37,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.translucent,
+                    onPanUpdate: (d) {
+                      final delta = d.delta.dx / width * safeMax;
+                      onChanged(RangeValues(low, (high + delta).clamp(low + .01, safeMax).toDouble()));
+                    },
+                    child: Center(child: Container(width: 3, height: 22, color: Colors.white)),
                   ),
                 ),
               ]),
             );
           }),
+        ),
+        SizedBox(
+          width: 36,
+          child: IconButton(
+            visualDensity: VisualDensity.compact,
+            tooltip: 'Layer options',
+            onPressed: onMore,
+            icon: const Icon(Icons.drag_handle_rounded, size: 20, color: Colors.white60),
+          ),
         ),
       ]),
     );
@@ -1548,151 +1589,145 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   Widget _timeline() {
     final duration = _videoDuration;
     final selected = _sel != null && _sel! < _layers.length ? _sel! : null;
+    final rulerPainter = _TimelineRulerPainter(
+      duration: duration,
+      currentSeconds: _ms / 1000,
+      bookmarks: _bookmarks,
+    );
     return Container(
-      height: 290,
-      margin: const EdgeInsets.fromLTRB(4, 3, 4, 3),
-      padding: const EdgeInsets.fromLTRB(8, 6, 8, 5),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(8),
-        color: const Color(0xFF151A24),
-        border: Border.all(color: Colors.white.withOpacity(.08)),
-        boxShadow: [BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(.08), blurRadius: 18)],
-      ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          const Icon(Icons.movie_filter_rounded, color: Color(0xFF43D9D2), size: 17),
-          const SizedBox(width: 7),
-          const Text('EDIT TIMELINE', style: TextStyle(fontSize: 10, letterSpacing: 1.7, fontWeight: FontWeight.w900)),
-          const SizedBox(width: 7),
-          Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), decoration: BoxDecoration(color: const Color(0x2236DCC4), borderRadius: BorderRadius.circular(6)), child: const Text('MULTI-LAYER', style: TextStyle(color: Color(0xFF36DCC4), fontSize: 8, fontWeight: FontWeight.w900))),
-          const Spacer(),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Undo',
-            onPressed: _undoStack.isEmpty ? null : _undo,
-            icon: const Icon(Icons.undo_rounded, size: 18),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Redo',
-            onPressed: _redoStack.isEmpty ? null : _redo,
-            icon: const Icon(Icons.redo_rounded, size: 18),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Split selected clip at playhead',
-            onPressed: selected == null ? null : _splitSelected,
-            icon: const Icon(Icons.content_cut_rounded, size: 17),
-          ),
-          IconButton(
-            visualDensity: VisualDensity.compact,
-            tooltip: 'Delete selected layer',
-            onPressed: selected == null ? null : _deleteSelected,
-            icon: const Icon(Icons.delete_outline_rounded, size: 18),
-          ),
-        ]),
-        if (_vc != null)
-          Row(children: [
-            Text(_fmt(_vc!.value.position), style: const TextStyle(fontSize: 9, color: Color(0xFF43D9D2))),
-            Expanded(
-              child: SliderTheme(
-                data: SliderTheme.of(context).copyWith(trackHeight: 2, thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5)),
-                child: Slider(
-                  value: _ms.clamp(0, _vc!.value.duration.inMilliseconds).toDouble(),
-                  max: math.max(1, _vc!.value.duration.inMilliseconds).toDouble(),
-                  onChanged: (v) {
-                    _pauseAudio();
-                    _lastAudioSyncBucket = -1;
-                    _vc?.seekTo(Duration(milliseconds: v.round()));
-                  },
+      color: const Color(0xFF050607),
+      child: Column(children: [
+        SizedBox(
+          height: 31,
+          child: LayoutBuilder(builder: (context, box) {
+            final markerLeft = (_t * box.maxWidth - 38).clamp(0.0, math.max(0.0, box.maxWidth - 76)).toDouble();
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTapDown: (d) => _scrubTimeline(d.localPosition.dx, box.maxWidth),
+              onHorizontalDragUpdate: (d) => _scrubTimeline(d.localPosition.dx, box.maxWidth),
+              child: Stack(children: [
+                Positioned.fill(child: CustomPaint(painter: rulerPainter)),
+                Positioned(
+                  left: markerLeft, top: 1,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                    decoration: BoxDecoration(color: const Color(0xFF20E36F), borderRadius: BorderRadius.circular(12)),
+                    child: Text(_fmt(Duration(milliseconds: _ms)), style: const TextStyle(color: Color(0xFF04140A), fontSize: 10, fontWeight: FontWeight.w900)),
+                  ),
                 ),
-              ),
-            ),
-            Text(_fmt(_vc!.value.duration), style: const TextStyle(fontSize: 9, color: Colors.white54)),
-          ]),
+              ]),
+            );
+          }),
+        ),
         Expanded(
           child: ListView(
+            padding: EdgeInsets.zero,
             children: [
               if (_vc != null)
                 _timelineTrack(
-                  title: 'Main video · trim clip',
-                  icon: Icons.videocam_rounded,
-                  accent: const Color(0xFF43D9D2),
+                  title: 'Video 1',
+                  icon: Icons.movie_rounded,
+                  accent: const Color(0xFF20C56A),
                   values: RangeValues(
-                    _trimStart.clamp(0.0, duration).toDouble(),
-                    _trimEnd.clamp(_trimStart, duration).toDouble(),
+                    (_trimStart / duration).clamp(0.0, 1.0).toDouble(),
+                    (_trimEnd / duration).clamp(0.0, 1.0).toDouble(),
                   ),
-                  max: duration,
-                  onDelete: _removeVideo,
+                  max: 1,
+                  visible: !_videoHidden,
+                  onVisibilityToggle: () => setState(() => _videoHidden = !_videoHidden),
+                  onMore: _showVideoOptions,
                   onChanged: (range) {
                     setState(() {
-                      _trimStart = range.start;
-                      _trimEnd = range.end;
+                      _trimStart = range.start * duration;
+                      _trimEnd = range.end * duration;
                     });
-                    if (_vc!.value.position < _time(_trimStart) ||
-                        _vc!.value.position > _time(_trimEnd)) {
+                    if (_vc!.value.position < _time(_trimStart) || _vc!.value.position > _time(_trimEnd)) {
                       _vc!.seekTo(_time(_trimStart));
                     }
                   },
                 ),
-              for (int i = 0; i < _layers.length; i++)
+              for (int i = _layers.length - 1; i >= 0; i--)
                 _timelineTrack(
-                  title: _layers[i].isNull ? 'Null object' : _layers[i].isMesh
-                      ? 'Mesh overlay'
-                      : _layers[i].isImage
-                          ? 'Photo overlay'
-                          : _layers[i].text,
-                  icon: _layers[i].isNull ? Icons.control_camera_rounded : _layers[i].isMesh
-                      ? Icons.grid_on
-                      : _layers[i].isImage
-                          ? Icons.image_rounded
-                          : Icons.subtitles_rounded,
-                  accent: _layers[i].isNull ? const Color(0xFF36DCC4) : _layers[i].isImage
-                      ? const Color(0xFFEC8BCB)
-                      : _layers[i].isMesh
-                          ? const Color(0xFF8B5CF6)
-                          : const Color(0xFFFFB45C),
+                  title: _layers[i].text,
+                  icon: _layers[i].isNull
+                      ? Icons.control_camera_rounded
+                      : _layers[i].isAdjustment
+                          ? Icons.tune_rounded
+                          : _layers[i].isSolid
+                              ? Icons.square_rounded
+                              : _layers[i].isShape
+                                  ? Icons.category_rounded
+                                  : _layers[i].isMesh
+                                      ? Icons.grid_4x4_rounded
+                                      : _layers[i].isImage
+                                          ? Icons.image_rounded
+                                          : Icons.title_rounded,
+                  accent: _layers[i].isNull
+                      ? const Color(0xFF26D977)
+                      : _layers[i].isAdjustment
+                          ? const Color(0xFFFFB74D)
+                          : _layers[i].isSolid
+                              ? const Color(0xFF36A8FF)
+                              : _layers[i].isShape
+                                  ? const Color(0xFFB78BFF)
+                                  : _layers[i].isImage
+                                      ? const Color(0xFF24B6B0)
+                                      : const Color(0xFF278B58),
                   values: RangeValues(_layers[i].start, _layers[i].end),
                   max: 1,
                   selected: selected == i,
+                  visible: !_layers[i].hidden,
+                  onVisibilityToggle: () => setState(() => _layers[i].hidden = !_layers[i].hidden),
                   keyframeTimes: _layers[i].kfs.map((keyframe) => keyframe.t).toList(),
                   onKeyframeTap: (time) {
                     _vc?.seekTo(Duration(milliseconds: time));
                     setState(() => _sel = i);
                   },
+                  onKeyframeMove: (oldTime, newTime) => _moveLayerKeyframe(i, oldTime, newTime),
                   onTap: () => setState(() => _sel = i),
+                  onMore: () => _showLayerActions(i),
                   onChanged: (range) => _ed(_layers[i], () {
                     _layers[i].start = range.start;
                     _layers[i].end = range.end;
                   }),
                 ),
-              for (final track in _audioTracks)
+              for (int i = 0; i < _audioTracks.length; i++)
                 _timelineTrack(
-                  title: 'Audio · ${track.title}',
+                  title: _audioTracks[i].title,
                   icon: Icons.graphic_eq_rounded,
-                  accent: const Color(0xFF62C9FF),
-                  values: RangeValues(track.start, track.end),
+                  accent: const Color(0xFF20DCA0),
+                  values: RangeValues(_audioTracks[i].start, _audioTracks[i].end),
                   max: 1,
-                  onChanged: (range) => setState(() {
-                    track.start = range.start;
-                    track.end = range.end;
-                  }),
                   onTap: () => setState(() => _tab = tabs.indexWhere((tab) => tab.$1 == 'Audio')),
-                  onDelete: () => _deleteAudio(track),
+                  onMore: () => _showAudioOptions(_audioTracks[i]),
+                  onChanged: (range) => setState(() {
+                    _audioTracks[i].start = range.start;
+                    _audioTracks[i].end = range.end;
+                  }),
                 ),
               if (_vc == null && _layers.isEmpty && _audioTracks.isEmpty)
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 14),
-                  child: Center(
-                    child: Text('Your clips, photos, captions and audio will appear here',
-                        style: TextStyle(fontSize: 10, color: Colors.white38)),
-                  ),
+                  padding: EdgeInsets.symmetric(vertical: 28),
+                  child: Center(child: Text('Import media or add a layer to begin', style: TextStyle(color: Colors.white38, fontSize: 11))),
                 ),
             ],
           ),
         ),
       ]),
     );
+  }
+
+  void _scrubTimeline(double dx, double width) {
+    if (width <= 0) return;
+    final targetMs = (dx / width * _videoDuration * 1000).round();
+    final target = Duration(milliseconds: targetMs.clamp(0, (_videoDuration * 1000).round()));
+    _pauseAudio();
+    _lastAudioSyncBucket = -1;
+    _vc?.seekTo(target);
+    for (final layer in _layers) {
+      layer.apply(target.inMilliseconds);
+    }
+    if (mounted) setState(() {});
   }
 
   Widget _tabBar() => SizedBox(
