@@ -9,6 +9,7 @@ import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_full/ffprobe_kit.dart';
 import 'package:ffmpeg_kit_flutter_new_full/return_code.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
@@ -443,7 +444,7 @@ class Editor extends StatefulWidget {
   State<Editor> createState() => _EditorState();
 }
 
-class _EditorState extends State<Editor> {
+class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   VideoPlayerController? _vc;
   final List<Layer> _layers = [];
   final List<AudioTrack> _audioTracks = [];
@@ -460,6 +461,25 @@ class _EditorState extends State<Editor> {
   double _brightness = 0, _contrast = 1, _saturation = 1;
   String? _videoPath;
   Size _stageSize = const Size(360, 230);
+  Ticker? _playbackTicker;
+  int _tickDivider = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _playbackTicker = createTicker((_) {
+      final controller = _vc;
+      if (controller == null || !controller.value.isPlaying) {
+        if (_playbackTicker?.isActive == true) _playbackTicker!.stop();
+        if (mounted) setState(() {});
+        return;
+      }
+      if (++_tickDivider % 2 != 0) return;
+      final frameMs = controller.value.position.inMilliseconds;
+      for (final layer in _layers) { layer.apply(frameMs); }
+      if (mounted) setState(() {});
+    });
+  }
 
   int get _ms => _vc?.value.position.inMilliseconds ?? 0;
   double get _t {
@@ -547,6 +567,7 @@ class _EditorState extends State<Editor> {
     if (controller == null) return;
     if (controller.value.isPlaying) {
       await controller.pause();
+      _playbackTicker?.stop();
       await _pauseAudio();
     } else {
       if (controller.value.position >= _time(_trimEnd)) {
@@ -555,6 +576,7 @@ class _EditorState extends State<Editor> {
       await controller.setVolume(_vol);
       _lastAudioSyncBucket = -1;
       await controller.play();
+      if (_playbackTicker?.isActive != true) _playbackTicker?.start();
       await _syncAudio();
     }
   }
@@ -578,9 +600,7 @@ class _EditorState extends State<Editor> {
           _syncAudio();
         }
       }
-      for (final layer in _layers) {
-        layer.apply(position.inMilliseconds);
-      }
+      if (!controller.value.isPlaying && mounted) setState(() {});
       if (controller.value.isPlaying &&
           _trimEnd > _trimStart &&
           position >= _time(_trimEnd)) {
@@ -2202,6 +2222,7 @@ class _EditorState extends State<Editor> {
 
   @override
   void dispose() {
+    _playbackTicker?.dispose();
     _vc?.dispose();
     for (final track in _audioTracks) {
       track.player.dispose();
