@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
 
-const _bg = Color(0xFF090A12);
-const _panel = Color(0xFF141625);
-const _violet = Color(0xFF8B5CF6);
-const _cyan = Color(0xFF43D9D2);
+const _bg = Color(0xFF0B1018);
+const _panel = Color(0xFF151E2A);
+const _violet = Color(0xFF79C8FF);
+const _cyan = Color(0xFF79C8FF);
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -22,6 +22,45 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _load();
+  }
+
+  Future<void> _showAppearanceSettings() async {
+    const choices = <Color>[
+      Color(0xFF79C8FF), Color(0xFF9DCAFF), Color(0xFF9BE7D5),
+      Color(0xFFC4A7FF), Color(0xFFFFB6C8), Color(0xFFFFC77D),
+    ];
+    final selected = await showModalBottomSheet<Color>(
+      context: context,
+      backgroundColor: _panel,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Text('Theme color', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 6),
+            const Text('Choose the accent used by EditShift controls.', style: TextStyle(color: Colors.white54, fontSize: 12)),
+            const SizedBox(height: 18),
+            Wrap(spacing: 14, runSpacing: 14, children: [
+              for (final color in choices)
+                GestureDetector(
+                  onTap: () => Navigator.pop(sheetContext, color),
+                  child: Container(
+                    width: 42, height: 42,
+                    decoration: BoxDecoration(
+                      color: color, shape: BoxShape.circle,
+                      border: Border.all(color: editShiftAccent.value == color ? Colors.white : Colors.white24, width: editShiftAccent.value == color ? 3 : 1),
+                    ),
+                  ),
+                ),
+            ]),
+          ]),
+        ),
+      ),
+    );
+    if (selected == null) return;
+    editShiftAccent.value = selected;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('editshift.accent', selected.value);
   }
 
   Future<void> _load() async {
@@ -111,7 +150,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           width: 48, height: 48,
                           decoration: BoxDecoration(
                             borderRadius: BorderRadius.circular(16),
-                            gradient: const LinearGradient(colors: [_violet, _cyan]),
+                            color: _violet,
                             boxShadow: [BoxShadow(color: _violet.withOpacity(.28), blurRadius: 24)],
                           ),
                           child: const Icon(Icons.movie_creation_rounded, color: Colors.white, size: 27),
@@ -122,6 +161,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           Text('MAKE EVERY FRAME MOVE.', style: TextStyle(color: Colors.white38, fontSize: 9, letterSpacing: 2.2, fontWeight: FontWeight.w700)),
                         ]),
                         const Spacer(),
+                        IconButton(
+                          tooltip: 'Appearance',
+                          onPressed: _showAppearanceSettings,
+                          icon: const Icon(Icons.palette_outlined, color: Colors.white70, size: 22),
+                        ),
                         IconButton(onPressed: _createProject, icon: const Icon(Icons.add_circle_outline, color: Colors.white, size: 27), tooltip: 'New project'),
                       ],
                     ),
@@ -134,7 +178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       padding: const EdgeInsets.all(26),
                       decoration: BoxDecoration(
                         borderRadius: BorderRadius.circular(28),
-                        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF28204A), Color(0xFF171A30), Color(0xFF102B35)]),
+                        color: const Color(0xFF182638),
                         border: Border.all(color: Colors.white.withOpacity(.08)),
                       ),
                       child: LayoutBuilder(builder: (context, c) => Row(
@@ -214,7 +258,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 width: double.infinity,
                                 decoration: const BoxDecoration(
                                   borderRadius: BorderRadius.vertical(top: Radius.circular(19)),
-                                  gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFF33265D), Color(0xFF172D3B)]),
+                                  color: const Color(0xFF20364B),
                                 ),
                                 child: const Center(child: Icon(Icons.play_circle_outline_rounded, color: Colors.white70, size: 45)),
                               )),
