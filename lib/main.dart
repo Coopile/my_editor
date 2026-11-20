@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'dart:typed_data';
@@ -16,17 +17,35 @@ import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'home_screen.dart';
 
-void main() => runApp(MaterialApp(
+final ValueNotifier<Color> editShiftAccent =
+    ValueNotifier<Color>(const Color(0xFF79C8FF));
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  final prefs = await SharedPreferences.getInstance();
+  editShiftAccent.value = Color(prefs.getInt('editshift.accent') ?? 0xFF79C8FF);
+  runApp(const EditShiftApp());
+}
+
+class EditShiftApp extends StatelessWidget {
+  const EditShiftApp({super.key});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<Color>(
+    valueListenable: editShiftAccent,
+    builder: (context, accent, _) => MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0B0D12),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF20E36F), brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(seedColor: accent, brightness: Brightness.dark),
         fontFamily: 'Roboto',
       ),
       home: const HomeScreen(),
-    ));
+    ),
+  );
+}
 
 // ---------- Effects library ----------
 const fxLibrary = [
@@ -311,6 +330,8 @@ class Layer {
   List<Offset> mesh = defaultMesh();
   List<KF> kfs = [];
   double curveEase = .65;
+  Offset curveHandle1 = const Offset(.42, 0);
+  Offset curveHandle2 = const Offset(.58, 1);
 
   Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false;
   Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, text = 'Mesh';
@@ -342,6 +363,8 @@ class Layer {
       ..shadow = shadow
       ..hidden = hidden
       ..curveEase = curveEase
+      ..curveHandle1 = curveHandle1
+      ..curveHandle2 = curveHandle2
       ..parentIndex = parentIndex
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
@@ -374,8 +397,7 @@ class Layer {
       }
     }
     var f = a.t == b.t ? 0.0 : (ms - a.t) / (b.t - a.t);
-    final smooth = f * f * (3 - 2 * f);
-    f = ui.lerpDouble(f, smooth, curveEase.clamp(0.0, 1.0))!;
+    f = _bezierProgress(f, curveHandle1, curveHandle2);
     pos = Offset.lerp(a.pos, b.pos, f)!;
     scale = ui.lerpDouble(a.scale, b.scale, f)!;
     rot = ui.lerpDouble(a.rot, b.rot, f)!;
@@ -383,20 +405,116 @@ class Layer {
   }
 }
 
+double _cubic(double a, double b, double c, double d, double t) {
+  final u = 1 - t;
+  return u * u * u * a + 3 * u * u * t * b +
+      3 * u * t * t * c + t * t * t * d;
+}
+
+double _bezierProgress(double x, Offset first, Offset second) {
+  final target = x.clamp(0.0, 1.0).toDouble();
+  var low = 0.0, high = 1.0;
+  for (int i = 0; i < 18; i++) {
+    final t = (low + high) / 2;
+    if (_cubic(0, first.dx, second.dx, 1, t) < target) {
+      low = t;
+    } else {
+      high = t;
+    }
+  }
+  return _cubic(0, first.dy, second.dy, 1, (low + high) / 2);
+}
+
 class _EaseGraphPainter extends CustomPainter {
-  final double ease;
-  _EaseGraphPainter(this.ease);
+  final Offset first, second;
+  _EaseGraphPainter(this.first, this.second);
+
+  Offset _point(Offset p, Size size) => Offset(
+    8 + p.dx * (size.width - 16),
+    size.height - 8 - p.dy * (size.height - 16),
+  );
+
   @override
   void paint(Canvas canvas, Size size) {
-    final grid = Paint()..color = Colors.white.withOpacity(.08)..strokeWidth = 1;
-    for (int i = 1; i < 4; i++) { final p = i * size.width / 4; canvas.drawLine(Offset(p, 0), Offset(p, size.height), grid); final q = i * size.height / 4; canvas.drawLine(Offset(0, q), Offset(size.width, q), grid); }
-    final path = Path()..moveTo(8, size.height - 8);
-    for (int i = 0; i <= 80; i++) { final x = i / 80; final smooth = x * x * (3 - 2 * x); final y = ui.lerpDouble(x, smooth, ease)!; path.lineTo(8 + x * (size.width - 16), size.height - 8 - y * (size.height - 16)); }
-    canvas.drawPath(path, Paint()..color = const Color(0xFF20E36F)..strokeWidth = 3..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
-    for (final p in [Offset(8, size.height - 8), Offset(size.width - 8, 8)]) canvas.drawCircle(p, 4, Paint()..color = Colors.white);
+    final grid = Paint()..color = Colors.white.withOpacity(.09)..strokeWidth = 1;
+    for (int i = 1; i < 4; i++) {
+      final x = i * size.width / 4, y = i * size.height / 4;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), grid);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), grid);
+    }
+    final a = Offset(8, size.height - 8);
+    final d = Offset(size.width - 8, 8);
+    final b = _point(first, size), c = _point(second, size);
+    final guide = Paint()..color = Colors.white38..strokeWidth = 1;
+    canvas.drawLine(a, b, guide);
+    canvas.drawLine(d, c, guide);
+    canvas.drawPath(
+      Path()..moveTo(a.dx, a.dy)..cubicTo(b.dx, b.dy, c.dx, c.dy, d.dx, d.dy),
+      Paint()..color = editShiftAccent.value..strokeWidth = 3
+        ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round,
+    );
+    for (final p in [a, d]) { canvas.drawCircle(p, 4, Paint()..color = Colors.white); }
+    for (final p in [b, c]) {
+      canvas.drawCircle(p, 8, Paint()..color = editShiftAccent.value);
+      canvas.drawCircle(p, 3, Paint()..color = Colors.white);
+    }
   }
+
   @override
-  bool shouldRepaint(_EaseGraphPainter old) => old.ease != ease;
+  bool shouldRepaint(_EaseGraphPainter old) =>
+      old.first != first || old.second != second;
+}
+
+class _BezierCurveEditor extends StatefulWidget {
+  final Offset first, second;
+  final void Function(Offset, Offset) onChanged;
+  const _BezierCurveEditor({
+    required this.first, required this.second, required this.onChanged,
+  });
+  @override
+  State<_BezierCurveEditor> createState() => _BezierCurveEditorState();
+}
+
+class _BezierCurveEditorState extends State<_BezierCurveEditor> {
+  int _dragging = 1;
+
+  Offset _pixel(Offset p, Size s) =>
+      Offset(8 + p.dx * (s.width - 16), s.height - 8 - p.dy * (s.height - 16));
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, box) {
+    final size = Size(box.maxWidth, 142);
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onPanStart: (d) {
+        final a = _pixel(widget.first, size), b = _pixel(widget.second, size);
+        _dragging = (d.localPosition - a).distance < (d.localPosition - b).distance ? 1 : 2;
+      },
+      onPanUpdate: (d) {
+        final p = Offset(
+          ((d.localPosition.dx - 8) / (size.width - 16)).clamp(0.0, 1.0).toDouble(),
+          (1 - (d.localPosition.dy - 8) / (size.height - 16)).clamp(-.25, 1.25).toDouble(),
+        );
+        if (_dragging == 1) {
+          widget.onChanged(Offset(p.dx.clamp(0.0, widget.second.dx).toDouble(), p.dy), widget.second);
+        } else {
+          widget.onChanged(widget.first, Offset(p.dx.clamp(widget.first.dx, 1.0).toDouble(), p.dy));
+        }
+      },
+      child: Container(
+        height: 142,
+        decoration: BoxDecoration(
+          color: const Color(0xFF101522),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: CustomPaint(
+          painter: _EaseGraphPainter(widget.first, widget.second),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+  });
 }
 
 
@@ -1900,6 +2018,20 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
 
   Widget _note(String t) => Padding(padding: const EdgeInsets.all(12), child: Text(t));
 
+  Widget _curvePreset(String label, Offset first, Offset second, Layer layer) =>
+      OutlinedButton(
+        onPressed: () => _ed(layer, () {
+          layer.curveHandle1 = first;
+          layer.curveHandle2 = second;
+        }),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          visualDensity: VisualDensity.compact,
+          side: BorderSide(color: Colors.white.withOpacity(.16)),
+        ),
+        child: Text(label, style: const TextStyle(fontSize: 10)),
+      );
+
   List<Widget> _body(Layer? l) {
     final name = tabs[_tab].$1;
 
@@ -2220,10 +2352,29 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           ]),
           const SizedBox(height: 8),
           const SizedBox(height: 14),
-          Row(children: [const Text('EASING GRAPH', style: TextStyle(fontSize: 10, color: Color(0xFF20E36F), fontWeight: FontWeight.w900, letterSpacing: 1.2)), const Spacer(), Text('${(l.curveEase * 100).round()}% smooth', style: const TextStyle(fontSize: 10, color: Colors.white54))]),
+          Row(children: [
+            const Text('CURVE EDITOR', style: TextStyle(fontSize: 10, color: Color(0xFF79C8FF), fontWeight: FontWeight.w900, letterSpacing: 1.2)),
+            const Spacer(),
+            const Text('Drag the handles', style: TextStyle(fontSize: 9, color: Colors.white54)),
+          ]),
           const SizedBox(height: 8),
-          GestureDetector(onHorizontalDragUpdate: (d) => _ed(l, () => l.curveEase = (l.curveEase + d.delta.dx / 180).clamp(0.0, 1.0).toDouble()), child: Container(height: 116, decoration: BoxDecoration(color: const Color(0xFF101522), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)), child: CustomPaint(painter: _EaseGraphPainter(l.curveEase), child: const SizedBox.expand()))),
-          Slider(value: l.curveEase, onChanged: (v) => _ed(l, () => l.curveEase = v)),
+          _BezierCurveEditor(
+            first: l.curveHandle1,
+            second: l.curveHandle2,
+            onChanged: (first, second) => _ed(l, () {
+              l.curveHandle1 = first;
+              l.curveHandle2 = second;
+            }),
+          ),
+          const SizedBox(height: 8),
+          Wrap(spacing: 5, runSpacing: 5, children: [
+            _curvePreset('Linear', const Offset(0, 0), const Offset(1, 1), l),
+            _curvePreset('Ease', const Offset(.42, 0), const Offset(.58, 1), l),
+            _curvePreset('Ease in', const Offset(.42, 0), const Offset(1, 1), l),
+            _curvePreset('Ease out', const Offset(0, 0), const Offset(.58, 1), l),
+            _curvePreset('Back', const Offset(.34, -.18), const Offset(.72, 1.18), l),
+            _curvePreset('Bounce', const Offset(.2, 1.2), const Offset(.8, .8), l),
+          ]),
           Wrap(spacing: 6, children: [
             for (final keyframe in l.kfs)
               ActionChip(
