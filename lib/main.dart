@@ -22,7 +22,7 @@ void main() => runApp(MaterialApp(
         useMaterial3: true,
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF0B0D12),
-        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF36DCC4), brightness: Brightness.dark),
+        colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF20E36F), brightness: Brightness.dark),
         fontFamily: 'Roboto',
       ),
       home: const HomeScreen(),
@@ -1316,7 +1316,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               alignment: Alignment(l.pivot.dx * 2 - 1, l.pivot.dy * 2 - 1),
               child: Container(
                 width: 22, height: 22,
-                decoration: BoxDecoration(color: const Color(0xFF8B5CF6), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
+                decoration: BoxDecoration(color: const Color(0xFF20E36F), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
                 child: const Icon(Icons.open_with, size: 13, color: Colors.white),
               ),
             ),
@@ -1782,7 +1782,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   border: Border(bottom: BorderSide(
                       color: _tab == i ? const Color(0xFF8B5CF6) : Colors.transparent, width: 3))),
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Icon(tabs[i].$2, color: _tab == i ? const Color(0xFFB69CFF) : Colors.white54),
+                Icon(tabs[i].$2, color: _tab == i ? const Color(0xFF20E36F) : Colors.white54),
                 Text(tabs[i].$1, style: const TextStyle(fontSize: 11)),
               ]),
             ),
@@ -1868,7 +1868,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   borderRadius: BorderRadius.circular(14),
                   color: current == i ? const Color(0xFF354052) : const Color(0xFF202735),
                   border: Border.all(
-                    color: current == i ? const Color(0xFFBFA8FF) : Colors.white.withOpacity(.06),
+                    color: current == i ? const Color(0xFF20E36F) : Colors.white.withOpacity(.06),
                     width: current == i ? 1.5 : 1,
                   ),
                   boxShadow: current == i
@@ -1876,7 +1876,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       : null,
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Icon(fxLibrary[i].$2, size: 19, color: current == i ? Colors.white : const Color(0xFF9D8FC8)),
+                  Icon(fxLibrary[i].$2, size: 19, color: current == i ? Colors.white : const Color(0xFFB8C0C7)),
                   Text(fxLibrary[i].$1, maxLines: 2, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
                 ]),
@@ -2397,9 +2397,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
 
   Widget _toolbar() => Container(
     height: 78,
-    color: const Color(0xFF070809),
     padding: const EdgeInsets.symmetric(horizontal: 4),
-    decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF242629)))),
+    decoration: const BoxDecoration(
+      color: Color(0xFF070809),
+      border: Border(top: BorderSide(color: Color(0xFF242629))),
+    ),
     child: Row(children: [
       _tool(Icons.folder_open_rounded, 'Media', _openMediaMenu),
       _tool(Icons.text_fields_rounded, 'Text', _addText),
