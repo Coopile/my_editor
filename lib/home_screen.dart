@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'main.dart';
@@ -16,6 +17,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _projects = [];
+  List<Map<String, dynamic>> _exports = [];
   bool _loading = true;
 
   @override
@@ -81,6 +83,17 @@ class _HomeScreenState extends State<HomeScreen> {
         _projects = [];
       }
     }
+    final savedExports = prefs.getString('editshift.exports');
+    if (savedExports != null) {
+      try {
+        _exports = (jsonDecode(savedExports) as List)
+            .map((item) => Map<String, dynamic>.from(item as Map))
+            .where((item) => item['path'] is String && File(item['path'] as String).existsSync())
+            .toList();
+      } catch (_) {
+        _exports = [];
+      }
+    }
     if (mounted) setState(() => _loading = false);
   }
 
@@ -135,6 +148,17 @@ class _HomeScreenState extends State<HomeScreen> {
     if (yes != true) return;
     setState(() => _projects.remove(project));
     await _save();
+  }
+
+  Future<void> _deleteExport(Map<String, dynamic> item) async {
+    final path = item['path'] as String;
+    try {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    } catch (_) {}
+    setState(() => _exports.remove(item));
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('editshift.exports', jsonEncode(_exports));
   }
 
   void _open(Map<String, dynamic> project) {
@@ -226,6 +250,32 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
+                if (_exports.isNotEmpty)
+                  SliverToBoxAdapter(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(28, 18, 28, 4),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        const Text('Your library', style: TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w800)),
+                        const SizedBox(height: 9),
+                        for (final item in _exports.take(6))
+                          Container(
+                            margin: const EdgeInsets.only(bottom: 7),
+                            decoration: BoxDecoration(color: _panel, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white10)),
+                            child: ListTile(
+                              dense: true,
+                              leading: const Icon(Icons.movie_creation_outlined, color: Color(0xFF79C8FF)),
+                              title: Text((item['name'] ?? 'EditShift export').toString(), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                              subtitle: const Text('Saved export', style: TextStyle(fontSize: 10, color: Colors.white38)),
+                              trailing: IconButton(
+                                tooltip: 'Delete export',
+                                onPressed: () => _deleteExport(item),
+                                icon: const Icon(Icons.delete_outline, size: 19, color: Colors.white54),
+                              ),
+                            ),
+                          ),
+                      ]),
+                    ),
+                  ),
                 SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.fromLTRB(28, 20, 28, 12),
