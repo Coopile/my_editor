@@ -627,6 +627,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   String _fxCategory = 'All', _fxSearch = '';
   bool _pivotMode = false, _exporting = false;
   double _previewZoom = 1.0;
+  double _timelineZoom = 1.0;
   double _vol = 1;
   int _lastAudioSyncBucket = -1;
   double _trimStart = 0, _trimEnd = 0;
@@ -2149,6 +2150,67 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       color: const Color(0xFF050607),
       child: Column(children: [
         SizedBox(
+          height: 34,
+          child: Row(children: [
+            IconButton(
+              tooltip: 'Zoom timeline out',
+              visualDensity: VisualDensity.compact,
+              onPressed: _timelineZoom <= 1
+                  ? null
+                  : () => setState(() => _timelineZoom = (_timelineZoom / 1.25).clamp(1.0, 8.0).toDouble()),
+              icon: const Icon(Icons.remove, size: 17, color: Colors.white70),
+            ),
+            Expanded(
+              child: SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  trackHeight: 2,
+                  thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5),
+                  overlayShape: const RoundSliderOverlayShape(overlayRadius: 10),
+                ),
+                child: Slider(
+                  min: 1,
+                  max: 8,
+                  divisions: 28,
+                  value: _timelineZoom.clamp(1.0, 8.0).toDouble(),
+                  onChanged: (value) => setState(() => _timelineZoom = value),
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Zoom timeline in',
+              visualDensity: VisualDensity.compact,
+              onPressed: _timelineZoom >= 8
+                  ? null
+                  : () => setState(() => _timelineZoom = (_timelineZoom * 1.25).clamp(1.0, 8.0).toDouble()),
+              icon: const Icon(Icons.add, size: 17, color: Colors.white70),
+            ),
+            TextButton(
+              onPressed: () => setState(() => _timelineZoom = 1),
+              style: TextButton.styleFrom(
+                foregroundColor: const Color(0xFF79C8FF),
+                padding: const EdgeInsets.symmetric(horizontal: 7),
+                minimumSize: const Size(38, 30),
+              ),
+              child: const Text('FIT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w900)),
+            ),
+            SizedBox(
+              width: 38,
+              child: Text(
+                '${_timelineZoom.toStringAsFixed(1)}x',
+                style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w700),
+              ),
+            ),
+          ]),
+        ),
+        Expanded(
+          child: LayoutBuilder(builder: (context, viewport) {
+            final contentWidth = viewport.maxWidth * _timelineZoom;
+            return SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: SizedBox(
+                width: contentWidth,
+                child: Column(children: [
+                          SizedBox(
           height: 31,
           child: LayoutBuilder(builder: (context, box) {
             final markerLeft = (_t * box.maxWidth - 38).clamp(0.0, math.max(0.0, box.maxWidth - 76)).toDouble();
@@ -2199,7 +2261,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             );
           }),
         ),
-        Expanded(
+                          Expanded(
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
@@ -2298,6 +2360,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 ),
             ],
           ),
+        ),
+                ]),
+              ),
+            );
+          }),
         ),
       ]),
     );
