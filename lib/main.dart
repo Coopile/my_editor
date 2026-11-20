@@ -588,6 +588,105 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     });
   }
 
+  // Shared slider used by the layer inspector. Keep the compact, flat
+  // Keyflow-inspired styling while routing edits through the undo system.
+  Widget _s(
+    Layer layer,
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged,
+  ) {
+    final safeValue = value.clamp(min, max).toDouble();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                safeValue.toStringAsFixed(2),
+                style: const TextStyle(
+                  color: Color(0xFF20E36F),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: [ui.FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: safeValue,
+            min: min,
+            max: max,
+            onChanged: (next) => _ed(layer, () => onChanged(next)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Project/video-level slider; its callback owns the setState update.
+  Widget _globalS(
+    String label,
+    double value,
+    double min,
+    double max,
+    ValueChanged<double> onChanged, {
+    String suffix = '',
+  }) {
+    final safeValue = value.clamp(min, max).toDouble();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  label,
+                  style: const TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              Text(
+                '${safeValue.toStringAsFixed(2)}$suffix',
+                style: const TextStyle(
+                  color: Color(0xFF20E36F),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  fontFeatures: [ui.FontFeature.tabularFigures()],
+                ),
+              ),
+            ],
+          ),
+          Slider(
+            value: safeValue,
+            min: min,
+            max: max,
+            onChanged: onChanged,
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pauseAudio() async {
     for (final track in _audioTracks) {
       await track.player.pause();
