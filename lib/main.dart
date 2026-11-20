@@ -1420,57 +1420,80 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }) {
     final low = values.start.clamp(0.0, max).toDouble();
     final high = values.end.clamp(low, max).toDouble();
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 7),
-        padding: const EdgeInsets.fromLTRB(10, 8, 8, 2),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF282044) : const Color(0xFF171A2B),
-          borderRadius: BorderRadius.circular(15),
-          border: Border.all(
-            color: selected ? accent.withOpacity(.85) : Colors.white.withOpacity(.055),
-            width: selected ? 1.3 : 1,
+    return Container(
+      height: 48,
+      margin: const EdgeInsets.only(bottom: 4),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFF202A39) : const Color(0xFF141A26),
+        border: Border(bottom: BorderSide(color: Colors.white.withOpacity(.045))),
+      ),
+      child: Row(children: [
+        SizedBox(
+          width: 112,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 5),
+              child: Row(children: [
+                Icon(icon, size: 15, color: accent),
+                const SizedBox(width: 5),
+                Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 9, color: selected ? Colors.white : Colors.white70, fontWeight: FontWeight.w700))),
+                if (onDelete != null)
+                  GestureDetector(onTap: onDelete, child: const Icon(Icons.close, size: 13, color: Colors.white38)),
+              ]),
+            ),
           ),
         ),
-        child: Column(children: [
-          Row(children: [
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(8),
-                gradient: LinearGradient(colors: [accent, accent.withOpacity(.35)]),
-              ),
-              child: Icon(icon, size: 15, color: Colors.white),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-            ),
-            if (selected)
-              const Text('SELECTED', style: TextStyle(color: Color(0xFF43D9D2), fontSize: 8, fontWeight: FontWeight.w800)),
-            if (onDelete != null)
-              IconButton(
-                visualDensity: VisualDensity.compact,
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints.tightFor(width: 28, height: 26),
-                onPressed: onDelete,
-                icon: const Icon(Icons.close_rounded, size: 16, color: Colors.white54),
-              ),
-          ]),
-          SizedBox(
-            height: 25,
-            child: RangeSlider(
-              values: RangeValues(low, high),
-              min: 0,
-              max: max,
-              onChanged: onChanged,
-            ),
-          ),
-        ]),
-      ),
+        Expanded(
+          child: LayoutBuilder(builder: (context, box) {
+            final width = box.maxWidth;
+            final left = (low / max * width).clamp(0.0, width).toDouble();
+            final right = (high / max * width).clamp(left, width).toDouble();
+            final clipWidth = math.max(18.0, right - left);
+            return GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onTap,
+              child: Stack(children: [
+                Positioned.fill(child: Center(child: Container(height: 1, color: Colors.white10))),
+                Positioned(left: left, top: 7, width: clipWidth, height: 34,
+                  child: GestureDetector(
+                    onTap: onTap,
+                    onPanUpdate: (d) {
+                      final delta = d.delta.dx / width * max;
+                      final span = high - low;
+                      final nextStart = (low + delta).clamp(0.0, max - span).toDouble();
+                      onChanged(RangeValues(nextStart, nextStart + span));
+                    },
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: accent.withOpacity(selected ? .88 : .62),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: selected ? Colors.white : accent.withOpacity(.65), width: selected ? 1.4 : .7),
+                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 5),
+                      child: Align(alignment: Alignment.centerLeft, child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.w800))),
+                    ),
+                  ),
+                ),
+                Positioned(left: (left - 3).clamp(0.0, width - 7), top: 5, width: 8, height: 38,
+                  child: GestureDetector(behavior: HitTestBehavior.translucent,
+                    onPanUpdate: (d) { final delta = d.delta.dx / width * max; onChanged(RangeValues((low + delta).clamp(0.0, high - .01).toDouble(), high)); },
+                    child: Center(child: Container(width: 4, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)))),
+                  ),
+                ),
+                Positioned(left: (right - 4).clamp(0.0, width - 7), top: 5, width: 8, height: 38,
+                  child: GestureDetector(behavior: HitTestBehavior.translucent,
+                    onPanUpdate: (d) { final delta = d.delta.dx / width * max; onChanged(RangeValues(low, (high + delta).clamp(low + .01, max).toDouble())); },
+                    child: Center(child: Container(width: 4, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)))),
+                  ),
+                ),
+              ]),
+            );
+          }),
+        ),
+      ]),
     );
   }
 
