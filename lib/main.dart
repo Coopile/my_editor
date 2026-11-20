@@ -1822,6 +1822,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       visualScale *= parent.scale;
       visualRotation += parent.rot;
       visualOpacity *= parent.opacity;
+      child = applyFx(
+        parent.fx,
+        child,
+        strength: parent.fxStrength,
+        speed: parent.fxSpeed,
+        time: _ms / 1000,
+      );
       parentIndex = parent.parentIndex;
     }
     return Positioned(
