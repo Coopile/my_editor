@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'dart:async';
+import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
@@ -605,7 +607,8 @@ const tabs = [
 // ---------- Editor ----------
 class Editor extends StatefulWidget {
   final String projectName;
-  const Editor({super.key, this.projectName = 'Untitled project'});
+  final String projectId;
+  const Editor({super.key, this.projectName = 'Untitled project', this.projectId = 'default'});
   @override
   State<Editor> createState() => _EditorState();
 }
@@ -633,10 +636,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   final Stopwatch _previewStopwatch = Stopwatch();
   int _previewAnchorMs = 0;
   int _tickDivider = 0;
+  Timer? _autosaveTimer;
+  bool _restoringProject = false;
 
   @override
   void initState() {
     super.initState();
+    _restoreProject();
     _playbackTicker = createTicker((_) {
       final controller = _vc;
       if (controller == null || !controller.value.isPlaying) {
@@ -649,6 +655,193 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       for (final layer in _layers) { layer.apply(frameMs); }
       if (mounted) setState(() {});
     });
+  }
+
+  void _queueProjectSave() {
+    if (_restoringProject || _vc?.value.isPlaying == true) return;
+    _autosaveTimer?.cancel();
+    _autosaveTimer = Timer(const Duration(milliseconds: 650), _saveProject);
+  }
+
+  @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _queueProjectSave();
+  }
+
+  Future<String> _keepProjectMedia(String source, String kind) async {
+    final docs = await getApplicationDocumentsDirectory();
+    final folder = Directory('${docs.path}/EditShiftProjects/${widget.projectId}/media');
+    await folder.create(recursive: true);
+    final extension = source.contains('.') ? source.split('.').last.split('?').first : 'dat';
+    final destination = '${folder.path}/${kind}_${DateTime.now().microsecondsSinceEpoch}.$extension';
+    return (await File(source).copy(destination)).path;
+  }
+
+  Map<String, dynamic> _encodeLayer(Layer layer) => {
+    'type': layer.isNull ? 'null' : layer.isSolid ? 'solid' :
+      layer.isShape ? 'shape' : layer.isAdjustment ? 'adjustment' :
+      layer.isMesh ? 'mesh' : layer.isImage ? 'image' : 'text',
+    'imagePath': layer.imagePath, 'text': layer.text,
+    'pos': [layer.pos.dx, layer.pos.dy], 'scale': layer.scale,
+    'rot': layer.rot, 'opacity': layer.opacity, 'fontSize': layer.fontSize,
+    'start': layer.start, 'end': layer.end, 'bend': layer.bend,
+    'fxStrength': layer.fxStrength, 'fxSpeed': layer.fxSpeed,
+    'pivot': [layer.pivot.dx, layer.pivot.dy], 'fx': layer.fx,
+    'color': layer.color.value, 'bold': layer.bold, 'italic': layer.italic,
+    'flipX': layer.flipX, 'flipY': layer.flipY, 'shadow': layer.shadow,
+    'hidden': layer.hidden, 'parentIndex': layer.parentIndex,
+    'mesh': layer.mesh.map((p) => [p.dx, p.dy]).toList(),
+    'keyframes': layer.kfs.map((k) => {
+      't': k.t, 'pos': [k.pos.dx, k.pos.dy], 'scale': k.scale,
+      'rot': k.rot, 'opacity': k.opacity,
+    }).toList(),
+    'curveHandle1': [layer.curveHandle1.dx, layer.curveHandle1.dy],
+    'curveHandle2': [layer.curveHandle2.dx, layer.curveHandle2.dy],
+  };
+
+  Layer _decodeLayer(Map<String, dynamic> data) {
+    final p = (data['pos'] as List?) ?? [0, 0];
+    final pos = Offset((p[0] as num).toDouble(), (p[1] as num).toDouble());
+    final type = data['type'];
+    final layer = switch (type) {
+      'null' => Layer.nullObject(pos),
+      'solid' => Layer.solid(pos),
+      'shape' => Layer.shape(pos),
+      'adjustment' => Layer.adjustment(pos),
+      'mesh' => Layer.mesh(pos),
+      'image' => Layer.image(data['imagePath'] as String?, pos),
+      _ => Layer.text((data['text'] ?? 'Text').toString(), pos),
+    };
+    final pivot = (data['pivot'] as List?) ?? [.5, .5];
+    final h1 = (data['curveHandle1'] as List?) ?? [.42, 0];
+    final h2 = (data['curveHandle2'] as List?) ?? [.58, 1];
+    layer
+      ..text = (data['text'] ?? layer.text).toString()
+      ..scale = (data['scale'] as num? ?? 1).toDouble()
+      ..rot = (data['rot'] as num? ?? 0).toDouble()
+      ..opacity = (data['opacity'] as num? ?? 1).toDouble()
+      ..fontSize = (data['fontSize'] as num? ?? 30).toDouble()
+      ..start = (data['start'] as num? ?? 0).toDouble()
+      ..end = (data['end'] as num? ?? 1).toDouble()
+      ..bend = (data['bend'] as num? ?? 0).toDouble()
+      ..fxStrength = (data['fxStrength'] as num? ?? 1).toDouble()
+      ..fxSpeed = (data['fxSpeed'] as num? ?? 1).toDouble()
+      ..pivot = Offset((pivot[0] as num).toDouble(), (pivot[1] as num).toDouble())
+      ..fx = (data['fx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1)
+      ..color = Color((data['color'] as num? ?? Colors.white.value).toInt())
+      ..bold = data['bold'] as bool? ?? true
+      ..italic = data['italic'] as bool? ?? false
+      ..flipX = data['flipX'] as bool? ?? false
+      ..flipY = data['flipY'] as bool? ?? false
+      ..shadow = data['shadow'] as bool? ?? false
+      ..hidden = data['hidden'] as bool? ?? false
+      ..parentIndex = (data['parentIndex'] as num?)?.toInt()
+      ..curveHandle1 = Offset((h1[0] as num).toDouble(), (h1[1] as num).toDouble())
+      ..curveHandle2 = Offset((h2[0] as num).toDouble(), (h2[1] as num).toDouble());
+    final mesh = data['mesh'] as List?;
+    if (mesh != null) {
+      layer.mesh = mesh.map((point) => Offset(
+        (point[0] as num).toDouble(), (point[1] as num).toDouble(),
+      )).toList();
+    }
+    final keys = data['keyframes'] as List? ?? [];
+    layer.kfs = keys.map((item) {
+      final key = Map<String, dynamic>.from(item as Map);
+      final kp = key['pos'] as List;
+      return KF(
+        (key['t'] as num).toInt(),
+        Offset((kp[0] as num).toDouble(), (kp[1] as num).toDouble()),
+        (key['scale'] as num).toDouble(),
+        (key['rot'] as num).toDouble(),
+        (key['opacity'] as num).toDouble(),
+      );
+    }).toList()..sort((a, b) => a.t.compareTo(b.t));
+    return layer;
+  }
+
+  Future<void> _saveProject() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final data = <String, dynamic>{
+        'version': 1,
+        'videoPath': _videoPath,
+        'trimStart': _trimStart, 'trimEnd': _trimEnd,
+        'videoFx': _videoFx, 'videoFxStrength': _videoFxStrength,
+        'videoFxSpeed': _videoFxSpeed,
+        'brightness': _brightness, 'contrast': _contrast,
+        'saturation': _saturation, 'videoHidden': _videoHidden,
+        'layers': _layers.map(_encodeLayer).toList(),
+        'audio': _audioTracks.map((track) => {
+          'path': track.path, 'title': track.title, 'volume': track.volume,
+          'start': track.start, 'end': track.end, 'hidden': track.hidden,
+        }).toList(),
+        'bookmarks': _bookmarks,
+        'selected': _sel,
+      };
+      await prefs.setString('editshift.project.${widget.projectId}', jsonEncode(data));
+    } catch (_) {
+      // Autosave must never interrupt editing; the last valid save remains intact.
+    }
+  }
+
+  Future<void> _restoreProject() async {
+    _restoringProject = true;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('editshift.project.${widget.projectId}');
+      if (raw == null) return;
+      final data = Map<String, dynamic>.from(jsonDecode(raw) as Map);
+      _layers
+        ..clear()
+        ..addAll((data['layers'] as List? ?? []).map((item) =>
+          _decodeLayer(Map<String, dynamic>.from(item as Map))));
+      _bookmarks
+        ..clear()
+        ..addAll((data['bookmarks'] as List? ?? []).map((v) => (v as num).toInt()));
+      _videoFx = (data['videoFx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1);
+      _videoFxStrength = (data['videoFxStrength'] as num? ?? 1).toDouble();
+      _videoFxSpeed = (data['videoFxSpeed'] as num? ?? 1).toDouble();
+      _brightness = (data['brightness'] as num? ?? 0).toDouble();
+      _contrast = (data['contrast'] as num? ?? 1).toDouble();
+      _saturation = (data['saturation'] as num? ?? 1).toDouble();
+      _videoHidden = data['videoHidden'] as bool? ?? false;
+      _trimStart = (data['trimStart'] as num? ?? 0).toDouble();
+      _trimEnd = (data['trimEnd'] as num? ?? 0).toDouble();
+      _sel = (data['selected'] as num?)?.toInt();
+      _audioTracks.clear();
+      for (final item in (data['audio'] as List? ?? [])) {
+        final audio = Map<String, dynamic>.from(item as Map);
+        final path = audio['path'] as String;
+        if (!File(path).existsSync()) continue;
+        final track = AudioTrack(
+          path: path, title: (audio['title'] ?? 'Audio').toString(),
+          volume: (audio['volume'] as num? ?? .8).toDouble(),
+        )
+          ..start = (audio['start'] as num? ?? 0).toDouble()
+          ..end = (audio['end'] as num? ?? 1).toDouble()
+          ..hidden = audio['hidden'] as bool? ?? false;
+        await track.player.setSourceDeviceFile(path);
+        _audioTracks.add(track);
+      }
+      final video = data['videoPath'] as String?;
+      if (video != null && File(video).existsSync()) {
+        _videoPath = video;
+        final controller = VideoPlayerController.file(File(video));
+        await controller.initialize();
+        _trimEnd = _trimEnd > 0 ? _trimEnd : controller.value.duration.inMilliseconds / 1000;
+        controller.addListener(() {
+          if (mounted && !controller.value.isPlaying) setState(() {});
+        });
+        _vc = controller;
+        await controller.setVolume(_vol);
+      }
+    } catch (_) {
+      // Ignore an incomplete/corrupt draft and leave the editor usable.
+    } finally {
+      _restoringProject = false;
+      if (mounted) setState(() {});
+    }
   }
 
   int get _ms => _vc?.value.isPlaying == true
@@ -862,9 +1055,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   Future<void> _pickVideo() async {
     final picked = await ImagePicker().pickVideo(source: ImageSource.gallery);
     if (picked == null) return;
+    final savedPath = await _keepProjectMedia(picked.path, 'video');
     await _vc?.dispose();
-    _videoPath = picked.path;
-    final controller = VideoPlayerController.file(File(picked.path));
+    _videoPath = savedPath;
+    final controller = VideoPlayerController.file(File(savedPath));
     await controller.initialize();
     await controller.setLooping(false);
     _trimStart = 0;
@@ -902,13 +1096,15 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   Future<void> _addPhoto() async {
     final picked = await ImagePicker().pickImage(source: ImageSource.gallery);
     if (picked == null) return;
-    _add(Layer.image(picked.path, const Offset(52, 52)));
+    final savedPath = await _keepProjectMedia(picked.path, 'image');
+    _add(Layer.image(savedPath, const Offset(52, 52)));
   }
 
   Future<void> _addAudio() async {
     final picked = await FilePicker.pickFile(type: FileType.audio);
     if (picked == null || picked.path == null) return;
-    final track = AudioTrack(path: picked.path!, title: picked.name)
+    final savedPath = await _keepProjectMedia(picked.path!, 'audio');
+    final track = AudioTrack(path: savedPath, title: picked.name)
       ..start = _t.clamp(0.0, 1.0).toDouble();
     await track.player.setSourceDeviceFile(track.path);
     if (!mounted) {
@@ -984,9 +1180,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }
 
   Future<void> _addSoundEffect(String kind) async {
-    final directory = await getTemporaryDirectory();
+    final directory = await getApplicationDocumentsDirectory();
     final safeName = kind.toLowerCase().replaceAll(' ', '_');
-    final path = '${directory.path}/editshift_${safeName}_${DateTime.now().microsecondsSinceEpoch}.wav';
+    final folder = Directory('${directory.path}/EditShiftProjects/${widget.projectId}/media');
+    await folder.create(recursive: true);
+    final path = '${folder.path}/${safeName}_${DateTime.now().microsecondsSinceEpoch}.wav';
     final file = File(path);
     await file.writeAsBytes(_makeSfxWave(kind), flush: true);
     final effectDuration = switch (kind) { 'Click' => .075, 'Pop' => .24, 'Whoosh' => .8, _ => 1.0 };
@@ -2742,6 +2940,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    _autosaveTimer?.cancel();
+    _saveProject();
     _previewStopwatch.stop();
     _playbackTicker?.dispose();
     _vc?.dispose();
