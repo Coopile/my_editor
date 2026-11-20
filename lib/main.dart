@@ -295,6 +295,9 @@ class Layer {
   final bool isMesh;
   final bool isImage;
   final bool isNull;
+  final bool isSolid;
+  final bool isShape;
+  final bool isAdjustment;
   int? parentIndex;
   String? imagePath;
   String text;
@@ -309,13 +312,16 @@ class Layer {
   List<KF> kfs = [];
   double curveEase = .65;
 
-  Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false;
-  Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, text = 'Mesh';
-  Layer.image(this.imagePath, this.pos) : isMesh = false, isImage = true, isNull = false, text = 'Photo';
-  Layer.nullObject(this.pos) : isMesh = false, isImage = false, isNull = true, text = 'Null';
+  Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false;
+  Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, text = 'Mesh';
+  Layer.image(this.imagePath, this.pos) : isMesh = false, isImage = true, isNull = false, isSolid = false, isShape = false, isAdjustment = false, text = 'Photo';
+  Layer.nullObject(this.pos) : isMesh = false, isImage = false, isNull = true, isSolid = false, isShape = false, isAdjustment = false, text = 'Null';
+  Layer.solid(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = true, isShape = false, isAdjustment = false, text = 'Solid Color';
+  Layer.shape(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = true, isAdjustment = false, text = 'Shape';
+  Layer.adjustment(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = true, text = 'Adjustment';
 
   Layer _copyAt(Offset position) {
-    final clone = isNull ? Layer.nullObject(position) : isMesh ? Layer.mesh(position) : isImage ? Layer.image(imagePath, position) : Layer.text(text, position);
+    final clone = isNull ? Layer.nullObject(position) : isSolid ? Layer.solid(position) : isShape ? Layer.shape(position) : isAdjustment ? Layer.adjustment(position) : isMesh ? Layer.mesh(position) : isImage ? Layer.image(imagePath, position) : Layer.text(text, position);
     clone
       ..scale = scale
       ..rot = rot
@@ -461,6 +467,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   double _brightness = 0, _contrast = 1, _saturation = 1;
   String? _videoPath;
   Size _stageSize = const Size(360, 230);
+  bool _showGrid = false, _previewFull = false, _videoHidden = false;
+  final List<int> _bookmarks = [];
   Ticker? _playbackTicker;
   final Stopwatch _previewStopwatch = Stopwatch();
   int _previewAnchorMs = 0;
@@ -1013,7 +1021,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           layer.end * totalDuration > trimStart &&
           layer.start * totalDuration < trimEnd).toList();
       final textLayers = _layers.where((layer) =>
-          !layer.isImage && !layer.isMesh && !layer.isNull && !layer.hidden &&
+          !layer.isImage && !layer.isMesh && !layer.isNull && !layer.isSolid && !layer.isShape && !layer.isAdjustment && !layer.hidden &&
           layer.text.trim().isNotEmpty &&
           layer.end * totalDuration > trimStart &&
           layer.start * totalDuration < trimEnd).toList();
@@ -1189,6 +1197,18 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     Widget child;
     if (l.isNull) {
       child = Container(width: 150, height: 96, decoration: BoxDecoration(color: const Color(0x2236DCC4), border: Border.all(color: const Color(0xFF36DCC4), width: 1.5), borderRadius: BorderRadius.circular(12)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.control_camera_rounded, color: Color(0xFF36DCC4), size: 30), SizedBox(height: 5), Text('NULL OBJECT', style: TextStyle(color: Color(0xFF36DCC4), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)), Text('Parent controller', style: TextStyle(color: Colors.white54, fontSize: 9))]));
+    } else if (l.isAdjustment) {
+      child = Container(width: 172, height: 58, decoration: BoxDecoration(color: const Color(0x2236DCC4), border: Border.all(color: const Color(0xFF36DCC4)), borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.tune_rounded, color: Color(0xFF36DCC4)), SizedBox(width: 8), Text('ADJUSTMENT LAYER', style: TextStyle(color: Color(0xFF36DCC4), fontWeight: FontWeight.w900, fontSize: 10))]));
+    } else if (l.isSolid || l.isShape) {
+      child = Container(
+        width: l.isSolid ? 240 : 144,
+        height: l.isSolid ? 240 : 144,
+        decoration: BoxDecoration(
+          color: l.color,
+          shape: l.isShape ? BoxShape.circle : BoxShape.rectangle,
+          border: sel ? Border.all(color: const Color(0xFF26D977), width: 1.5) : null,
+        ),
+      );
     } else if (l.isMesh) {
       child = SizedBox(
         width: 120, height: 120,
