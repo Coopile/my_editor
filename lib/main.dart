@@ -1173,6 +1173,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       }
       for (int i = 0; i < _audioTracks.length; i++) {
         final track = _audioTracks[i];
+        if (track.hidden) continue;
         final inputIndex = audioInputStart + i;
         final start = (track.start * totalDuration - trimStart).clamp(0.0, clipDuration);
         final end = (track.end * totalDuration - trimStart).clamp(0.0, clipDuration);
@@ -1836,6 +1837,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             color: const Color(0xFF202735),
+          ),
           child: Row(children: [
             const Icon(Icons.auto_awesome_rounded, color: Color(0xFF43D9D2), size: 22),
             const SizedBox(width: 10),
