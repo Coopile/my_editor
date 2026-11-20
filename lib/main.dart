@@ -1253,8 +1253,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         ),
       ]);
     }
+    final parent = l.parentIndex != null && l.parentIndex! >= 0 && l.parentIndex! < _layers.length ? _layers[l.parentIndex!] : null;
+    final visualPosition = parent == null ? l.pos : l.pos + parent.pos;
     return Positioned(
-      left: l.pos.dx, top: l.pos.dy,
+      left: visualPosition.dx, top: visualPosition.dy,
       child: GestureDetector(
         onTap: () => setState(() => _sel = i),
         onDoubleTap: () => setState(() { _sel = i; _pivotMode = !_pivotMode; }),
@@ -1874,6 +1876,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           _s(l, 'Rotate', l.rot, -math.pi, math.pi, (v) => l.rot = v),
           _s(l, 'Pivot X', l.pivot.dx, 0, 1, (v) => l.pivot = Offset(v, l.pivot.dy)),
           _s(l, 'Pivot Y', l.pivot.dy, 0, 1, (v) => l.pivot = Offset(l.pivot.dx, v)),
+          if (!l.isNull && _layers.any((candidate) => candidate.isNull))
+            DropdownButtonFormField<int?>(
+              value: l.parentIndex,
+              decoration: const InputDecoration(labelText: 'Parent null object', border: OutlineInputBorder()),
+              items: [const DropdownMenuItem<int?>(value: null, child: Text('No parent')), for (int i = 0; i < _layers.length; i++) if (_layers[i].isNull && i != _sel) DropdownMenuItem<int?>(value: i, child: Text('Null ${i + 1}'))],
+              onChanged: (value) => _ed(l, () => l.parentIndex = value),
+            ),
           Wrap(spacing: 8, children: [
             FilterChip(label: const Text('Flip horizontal'), selected: l.flipX,
                 onSelected: (v) => _ed(l, () => l.flipX = v)),
