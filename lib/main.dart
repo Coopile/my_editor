@@ -1464,7 +1464,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       final trimStart = _trimStart.clamp(0.0, math.max(0.0, totalDuration - .05)).toDouble();
       final trimEnd = _trimEnd.clamp(trimStart + .05, totalDuration).toDouble();
       final clipDuration = trimEnd - trimStart;
-      final outputDir = await getApplicationDocumentsDirectory();
+      final documents = await getApplicationDocumentsDirectory();
+      final outputDir = Directory('${documents.path}/EditShiftLibrary');
+      await outputDir.create(recursive: true);
       final outputPath =
           '${outputDir.path}/EditShift_${DateTime.now().millisecondsSinceEpoch}.mp4';
 
@@ -1625,6 +1627,26 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         throw Exception(details.isEmpty ? 'FFmpeg export failed.' : details);
       }
 
+      final prefs = await SharedPreferences.getInstance();
+      final savedExports = <Map<String, dynamic>>[];
+      final oldExports = prefs.getString('editshift.exports');
+      if (oldExports != null) {
+        try {
+          savedExports.addAll((jsonDecode(oldExports) as List)
+              .map((item) => Map<String, dynamic>.from(item as Map)));
+        } catch (_) {}
+      }
+      savedExports.insert(0, {
+        'path': outputPath,
+        'name': 'EditShift export ${DateTime.now().toLocal().toString().substring(0, 16)}',
+        'created': DateTime.now().toIso8601String(),
+      });
+      await prefs.setString('editshift.exports', jsonEncode(savedExports.take(100).toList()));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Saved to your EditShift Library')),
+        );
+      }
       await SharePlus.instance.share(
         ShareParams(
           title: 'EditShift export',
