@@ -1816,7 +1816,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final visitedParents = <int>{i};
     while (parentIndex != null && parentIndex >= 0 && parentIndex < _layers.length && visitedParents.add(parentIndex)) {
       final parent = _layers[parentIndex];
-      visualPosition = parent.pos + Offset(visualPosition.dx * parent.scale, visualPosition.dy * parent.scale);
+      final scaled = Offset(visualPosition.dx * parent.scale, visualPosition.dy * parent.scale);
+      final angle = parent.rot;
+      visualPosition = parent.pos + Offset(scaled.dx * math.cos(angle) - scaled.dy * math.sin(angle), scaled.dx * math.sin(angle) + scaled.dy * math.cos(angle));
       visualScale *= parent.scale;
       visualRotation += parent.rot;
       visualOpacity *= parent.opacity;
@@ -1854,7 +1856,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         child: Container(
           color: const Color(0xFF000000),
           child: ClipRect(
-            child: Stack(fit: StackFit.expand, children: [
+            child: Transform.scale(scale: _previewZoom, child: Stack(fit: StackFit.expand, children: [
               if (vc != null && !_videoHidden)
                 if (_previewFull)
                   Positioned.fill(
@@ -1895,6 +1897,14 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               else if (_layers.isEmpty)
                 const Center(child: Text('PREVIEW', style: TextStyle(color: Colors.white24, fontSize: 11, letterSpacing: 2.2, fontWeight: FontWeight.w700))),
               for (int i = 0; i < _layers.length; i++) _layerView(i),
+              Positioned(top: 7, right: 7, child: Material(color: const Color(0xCC111820), borderRadius: BorderRadius.circular(10), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 2), child: Row(mainAxisSize: MainAxisSize.min, children: [
+                IconButton(tooltip: 'Zoom out', visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 30), padding: EdgeInsets.zero, onPressed: () => setState(() => _previewZoom = (_previewZoom - .1).clamp(.5, 2.5).toDouble()), icon: const Icon(Icons.remove, size: 16)),
+                GestureDetector(onTap: () => setState(() => _previewZoom = 1), child: Padding(padding: const EdgeInsets.symmetric(horizontal: 4), child: Text('${(_previewZoom * 100).round()}%', style: const TextStyle(fontSize: 9, color: Colors.white70)))),
+                IconButton(tooltip: 'Zoom in', visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 30), padding: EdgeInsets.zero, onPressed: () => setState(() => _previewZoom = (_previewZoom + .1).clamp(.5, 2.5).toDouble()), icon: const Icon(Icons.add, size: 16)),
+                Container(width: 1, height: 18, color: Colors.white24),
+                IconButton(tooltip: 'Add keyframe', visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 30), padding: EdgeInsets.zero, onPressed: _sel == null ? null : _addKeyframeNow, icon: const Icon(Icons.diamond_outlined, size: 16, color: Color(0xFF79C8FF))),
+                IconButton(tooltip: 'Delete selected layer', visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 30), padding: EdgeInsets.zero, onPressed: _sel == null ? null : _deleteSelected, icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent)),
+              ])))),
               if (_showGrid)
                 const Positioned.fill(
                   child: IgnorePointer(
@@ -1906,7 +1916,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     ),
                   ),
                 ),
-            ]),
+            ])),
           ),
         ),
       );
@@ -1952,17 +1962,12 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           child: Text(_previewFull ? 'Fit' : 'Full', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
         ),
         control(Icons.bookmark_border_rounded, 'Add bookmark', _addBookmark),
-        control(Icons.remove_rounded, 'Zoom out', () => setState(() => _previewZoom = (_previewZoom - .1).clamp(.5, 2.5).toDouble())),
-        TextButton(onPressed: () => setState(() => _previewZoom = 1), style: TextButton.styleFrom(foregroundColor: Colors.white70, padding: const EdgeInsets.symmetric(horizontal: 3), minimumSize: const Size(30, 30)), child: const Text('Reset', style: TextStyle(fontSize: 9))),
-        control(Icons.add_rounded, 'Zoom in', () => setState(() => _previewZoom = (_previewZoom + .1).clamp(.5, 2.5).toDouble())),
         const Spacer(),
         control(Icons.skip_previous_rounded, 'Previous frame', _vc == null ? null : () => _seekFrames(-1)),
         control(_vc?.value.isPlaying == true ? Icons.pause_rounded : Icons.play_arrow_rounded, 'Play or pause', _vc == null ? null : _togglePlayback, color: const Color(0xFF20E36F)),
         control(Icons.skip_next_rounded, 'Next frame', _vc == null ? null : () => _seekFrames(1)),
         const Spacer(),
         control(Icons.layers_rounded, 'Layer properties', _openInspectorSheet),
-        control(Icons.diamond_rounded, 'Add keyframe', _sel == null ? null : _addKeyframeNow, color: const Color(0xFF79C8FF)),
-        control(Icons.delete_outline_rounded, 'Delete selected layer', _sel == null ? null : _deleteSelected, color: Colors.redAccent),
         control(Icons.undo_rounded, 'Undo', _undoStack.isEmpty ? null : _undo),
         control(Icons.redo_rounded, 'Redo', _redoStack.isEmpty ? null : _redo),
       ]),
