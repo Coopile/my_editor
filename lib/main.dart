@@ -447,6 +447,7 @@ class AudioTrack {
   double volume;
   double start = 0;
   double end = 1;
+  bool hidden = false;
   AudioTrack({required this.path, required this.title, this.volume = .8})
       : player = AudioPlayer();
 }
@@ -596,6 +597,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   Future<void> _syncAudio() async {
     final now = _ms / 1000;
     for (final track in _audioTracks) {
+      if (track.hidden) {
+        if (track.player.state == PlayerState.playing) await track.player.pause();
+        continue;
+      }
       final startMs = (track.start * _videoDuration * 1000).round();
       final endMs = (track.end * _videoDuration * 1000).round();
       if (now * 1000 >= startMs && now * 1000 < endMs) {
@@ -1735,6 +1740,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   accent: const Color(0xFF20DCA0),
                   values: RangeValues(_audioTracks[i].start, _audioTracks[i].end),
                   max: 1,
+                  visible: !_audioTracks[i].hidden,
+                  onVisibilityToggle: () => setState(() => _audioTracks[i].hidden = !_audioTracks[i].hidden),
                   onTap: () => setState(() => _tab = tabs.indexWhere((tab) => tab.$1 == 'Audio')),
                   onMore: () => _showAudioOptions(_audioTracks[i]),
                   onChanged: (range) => setState(() {
