@@ -1294,10 +1294,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       return GestureDetector(
         onTap: () => setState(() => _sel = null),
         child: Container(
-          decoration: const BoxDecoration(
-            color: const Color(0xFF171D29), Color(0xFF101528), Color(0xFF15112C)],
-            ),
-          ),
+          decoration: const BoxDecoration(color: Color(0xFF10141D)),
           child: ClipRect(
             child: Stack(fit: StackFit.expand, children: [
               if (vc != null)
@@ -1537,8 +1534,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        color: const Color(0xFF171D29), Color(0xFF101321), Color(0xFF211633)],
-        ),
+        color: const Color(0xFF151A24),
         border: Border.all(color: Colors.white.withOpacity(.08)),
         boxShadow: [BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(.08), blurRadius: 18)],
       ),
@@ -1740,9 +1736,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            color: const Color(0xFF171D29), Color(0xFF14333F)],
-            ),
-          ),
+            color: const Color(0xFF202735),
           child: Row(children: [
             const Icon(Icons.auto_awesome_rounded, color: Color(0xFF43D9D2), size: 22),
             const SizedBox(width: 10),
@@ -1780,9 +1774,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
-                  color: const Color(0xFF171D29), const Color(0xFF266F83)]
-                        : [const Color(0xFF24283E), const Color(0xFF171A2B)],
-                  ),
+                  color: current == i ? const Color(0xFF354052) : const Color(0xFF202735),
                   border: Border.all(
                     color: current == i ? const Color(0xFFBFA8FF) : Colors.white.withOpacity(.06),
                     width: current == i ? 1.5 : 1,
@@ -2123,8 +2115,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final layer = validSelection ? _layers[_sel!] : null;
     return Container(
       decoration: const BoxDecoration(
-        color: const Color(0xFF171D29), Color(0xFF0D101B)],
-        ),
+        color: const Color(0xFF0D101B),
         border: Border(left: BorderSide(color: Colors.white10)),
       ),
       child: Column(children: [
@@ -2140,7 +2131,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   padding: const EdgeInsets.all(11),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    color: const Color(0xFF171D29), Color(0xFF173744)]),
+                    color: const Color(0xFF202735),
                   ),
                   child: Row(children: [
                     const Icon(Icons.layers_rounded, color: Color(0xFF43D9D2), size: 18),
@@ -2173,8 +2164,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               height: 34,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                color: const Color(0xFF171D29), Color(0xFF1D4050)],
-                ),
+                color: const Color(0xFF273243),
               ),
               child: Icon(icon, size: 19, color: Colors.white),
             ),
@@ -2208,10 +2198,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         foregroundColor: Colors.white,
         elevation: 0,
         flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            color: const Color(0xFF171D29), Color(0xFF141B2A), Color(0xFF102D32)],
-            ),
-          ),
+          decoration: const BoxDecoration(color: Color(0xFF171D29)),
         ),
         title: Text(
           widget.projectName,
