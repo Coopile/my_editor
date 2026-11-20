@@ -1295,10 +1295,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         onTap: () => setState(() => _sel = null),
         child: Container(
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF090B18), Color(0xFF101528), Color(0xFF15112C)],
+            color: const Color(0xFF171D29), Color(0xFF101528), Color(0xFF15112C)],
             ),
           ),
           child: ClipRect(
@@ -1427,6 +1424,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     bool selected = false,
     VoidCallback? onTap,
     VoidCallback? onDelete,
+    List<int> keyframeTimes = const [],
+    ValueChanged<int>? onKeyframeTap,
   }) {
     final low = values.start.clamp(0.0, max).toDouble();
     final high = values.end.clamp(low, max).toDouble();
@@ -1467,6 +1466,27 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               child: Stack(children: [
                 Positioned.fill(child: Center(child: Container(height: 1, color: Colors.white10))),
                 Positioned(left: (_t.clamp(0.0, 1.0) * width).clamp(0.0, width - 1).toDouble(), top: 0, bottom: 0, width: 1, child: Container(color: const Color(0xFF36DCC4))),
+                for (final keyTime in keyframeTimes)
+                  Positioned(
+                    left: ((keyTime / 1000 / _videoDuration.clamp(.001, double.infinity)) * width - 5).clamp(0.0, width - 10).toDouble(),
+                    top: 15,
+                    width: 10,
+                    height: 10,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onKeyframeTap == null ? null : () => onKeyframeTap(keyTime),
+                      child: Transform.rotate(
+                        angle: math.pi / 4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: selected ? const Color(0xFFFFD76A) : Colors.white,
+                            border: Border.all(color: const Color(0xFF10141D), width: 1.2),
+                            borderRadius: BorderRadius.circular(1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(left: left, top: 7, width: clipWidth, height: 34,
                   child: GestureDetector(
                     onTap: onTap,
@@ -1517,10 +1537,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFF1C2037), Color(0xFF101321), Color(0xFF211633)],
+        color: const Color(0xFF171D29), Color(0xFF101321), Color(0xFF211633)],
         ),
         border: Border.all(color: Colors.white.withOpacity(.08)),
         boxShadow: [BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(.08), blurRadius: 18)],
@@ -1622,6 +1639,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   values: RangeValues(_layers[i].start, _layers[i].end),
                   max: 1,
                   selected: selected == i,
+                  keyframeTimes: _layers[i].kfs.map((keyframe) => keyframe.t).toList(),
+                  onKeyframeTap: (time) {
+                    _vc?.seekTo(Duration(milliseconds: time));
+                    setState(() => _sel = i);
+                  },
                   onTap: () => setState(() => _sel = i),
                   onChanged: (range) => _ed(_layers[i], () {
                     _layers[i].start = range.start;
@@ -1718,8 +1740,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(
-              colors: [Color(0xFF33245F), Color(0xFF14333F)],
+            color: const Color(0xFF171D29), Color(0xFF14333F)],
             ),
           ),
           child: Row(children: [
@@ -1759,11 +1780,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(14),
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: current == i
-                        ? [const Color(0xFF8B5CF6), const Color(0xFF266F83)]
+                  color: const Color(0xFF171D29), const Color(0xFF266F83)]
                         : [const Color(0xFF24283E), const Color(0xFF171A2B)],
                   ),
                   border: Border.all(
@@ -1802,7 +1819,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
-            gradient: const LinearGradient(colors: [Color(0xFF193A4E), Color(0xFF1C2440)]),
+            color: const Color(0xFF171D29), Color(0xFF1C2440)]),
           ),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             const Text('MAIN CLIP VOLUME', style: TextStyle(fontSize: 9, letterSpacing: 1.4, color: Colors.white60, fontWeight: FontWeight.w800)),
@@ -2106,10 +2123,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final layer = validSelection ? _layers[_sel!] : null;
     return Container(
       decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [Color(0xFF15182A), Color(0xFF0D101B)],
+        color: const Color(0xFF171D29), Color(0xFF0D101B)],
         ),
         border: Border(left: BorderSide(color: Colors.white10)),
       ),
@@ -2126,7 +2140,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   padding: const EdgeInsets.all(11),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(14),
-                    gradient: const LinearGradient(colors: [Color(0xFF30234F), Color(0xFF173744)]),
+                    color: const Color(0xFF171D29), Color(0xFF173744)]),
                   ),
                   child: Row(children: [
                     const Icon(Icons.layers_rounded, color: Color(0xFF43D9D2), size: 18),
@@ -2159,10 +2173,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               height: 34,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
-                gradient: const LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Color(0xFF34265F), Color(0xFF1D4050)],
+                color: const Color(0xFF171D29), Color(0xFF1D4050)],
                 ),
               ),
               child: Icon(icon, size: 19, color: Colors.white),
@@ -2198,10 +2209,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         elevation: 0,
         flexibleSpace: Container(
           decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.centerLeft,
-              end: Alignment.centerRight,
-              colors: [Color(0xFF1B2030), Color(0xFF141B2A), Color(0xFF102D32)],
+            color: const Color(0xFF171D29), Color(0xFF141B2A), Color(0xFF102D32)],
             ),
           ),
         ),
