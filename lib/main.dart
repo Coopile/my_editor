@@ -392,7 +392,7 @@ class _EaseGraphPainter extends CustomPainter {
     for (int i = 1; i < 4; i++) { final p = i * size.width / 4; canvas.drawLine(Offset(p, 0), Offset(p, size.height), grid); final q = i * size.height / 4; canvas.drawLine(Offset(0, q), Offset(size.width, q), grid); }
     final path = Path()..moveTo(8, size.height - 8);
     for (int i = 0; i <= 80; i++) { final x = i / 80; final smooth = x * x * (3 - 2 * x); final y = ui.lerpDouble(x, smooth, ease)!; path.lineTo(8 + x * (size.width - 16), size.height - 8 - y * (size.height - 16)); }
-    canvas.drawPath(path, Paint()..color = const Color(0xFF36DCC4)..strokeWidth = 3..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+    canvas.drawPath(path, Paint()..color = const Color(0xFF20E36F)..strokeWidth = 3..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
     for (final p in [Offset(8, size.height - 8), Offset(size.width - 8, 8)]) canvas.drawCircle(p, 4, Paint()..color = Colors.white);
   }
   @override
@@ -1242,7 +1242,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final al = FractionalOffset(l.pivot.dx, l.pivot.dy);
     Widget child;
     if (l.isNull) {
-      child = Container(width: 150, height: 96, decoration: BoxDecoration(color: const Color(0x2236DCC4), border: Border.all(color: const Color(0xFF36DCC4), width: 1.5), borderRadius: BorderRadius.circular(12)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.control_camera_rounded, color: Color(0xFF36DCC4), size: 30), SizedBox(height: 5), Text('NULL OBJECT', style: TextStyle(color: Color(0xFF36DCC4), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)), Text('Parent controller', style: TextStyle(color: Colors.white54, fontSize: 9))]));
+      child = Container(width: 150, height: 96, decoration: BoxDecoration(color: const Color(0x2220E36F), border: Border.all(color: const Color(0xFF36DCC4), width: 1.5), borderRadius: BorderRadius.circular(12)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.control_camera_rounded, color: Color(0xFF36DCC4), size: 30), SizedBox(height: 5), Text('NULL OBJECT', style: TextStyle(color: Color(0xFF36DCC4), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)), Text('Parent controller', style: TextStyle(color: Colors.white54, fontSize: 9))]));
     } else if (l.isAdjustment) {
       child = Container(width: 172, height: 58, decoration: BoxDecoration(color: const Color(0x2236DCC4), border: Border.all(color: const Color(0xFF36DCC4)), borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.tune_rounded, color: Color(0xFF36DCC4)), SizedBox(width: 8), Text('ADJUSTMENT LAYER', style: TextStyle(color: Color(0xFF36DCC4), fontWeight: FontWeight.w900, fontSize: 10))]));
     } else if (l.isSolid || l.isShape) {
@@ -1787,7 +1787,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               width: 74,
               decoration: BoxDecoration(
                   border: Border(bottom: BorderSide(
-                      color: _tab == i ? const Color(0xFF8B5CF6) : Colors.transparent, width: 3))),
+                      color: _tab == i ? const Color(0xFF20E36F) : Colors.transparent, width: 3))),
               child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
                 Icon(tabs[i].$2, color: _tab == i ? const Color(0xFF20E36F) : Colors.white54),
                 Text(tabs[i].$1, style: const TextStyle(fontSize: 11)),
@@ -1804,7 +1804,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
 
     if (name == 'Adjust') {
       return [
-        const Text('COLOR & LIGHT', style: TextStyle(fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w900, color: Color(0xFF43D9D2))),
+        const Text('COLOR & LIGHT', style: TextStyle(fontSize: 10, letterSpacing: 1.5, fontWeight: FontWeight.w900, color: Color(0xFF20E36F))),
         const SizedBox(height: 8),
         _globalS('Brightness', _brightness, -1, 1, (v) => setState(() => _brightness = v)),
         _globalS('Contrast', _contrast, 0, 2, (v) => setState(() => _contrast = v)),
