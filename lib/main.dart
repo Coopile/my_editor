@@ -1243,13 +1243,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final al = FractionalOffset(l.pivot.dx, l.pivot.dy);
     Widget child;
     if (l.isNull) {
-      child = Container(width: 150, height: 96, decoration: BoxDecoration(color: const Color(0x2220E36F), border: Border.all(color: const Color(0xFF36DCC4), width: 1.5), borderRadius: BorderRadius.circular(12)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.control_camera_rounded, color: Color(0xFF36DCC4), size: 30), SizedBox(height: 5), Text('NULL OBJECT', style: TextStyle(color: Color(0xFF36DCC4), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)), Text('Parent controller', style: TextStyle(color: Colors.white54, fontSize: 9))]));
+      child = Container(width: 150, height: 96, decoration: BoxDecoration(color: const Color(0x2220E36F), border: Border.all(color: const Color(0xFF20E36F), width: 1.5), borderRadius: BorderRadius.circular(12)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.control_camera_rounded, color: Color(0xFF20E36F), size: 30), SizedBox(height: 5), Text('NULL OBJECT', style: TextStyle(color: Color(0xFF20E36F), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)), Text('Parent controller', style: TextStyle(color: Colors.white54, fontSize: 9))]));
     } else if (l.isAdjustment) {
-      child = Container(width: 172, height: 58, decoration: BoxDecoration(color: const Color(0x2236DCC4), border: Border.all(color: const Color(0xFF36DCC4)), borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.tune_rounded, color: Color(0xFF36DCC4)), SizedBox(width: 8), Text('ADJUSTMENT LAYER', style: TextStyle(color: Color(0xFF36DCC4), fontWeight: FontWeight.w900, fontSize: 10))]));
+      child = Container(width: 172, height: 58, decoration: BoxDecoration(color: const Color(0x2220E36F), border: Border.all(color: const Color(0xFF20E36F)), borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.tune_rounded, color: Color(0xFF20E36F)), SizedBox(width: 8), Text('ADJUSTMENT LAYER', style: TextStyle(color: Color(0xFF20E36F), fontWeight: FontWeight.w900, fontSize: 10))]));
     } else if (l.isSolid || l.isShape) {
       child = Container(
-        width: l.isSolid ? 240 : 144,
-        height: l.isSolid ? 240 : 144,
+        width: l.isSolid ? _stageSize.width : 144,
+        height: l.isSolid ? _stageSize.height : 144,
         decoration: BoxDecoration(
           color: l.color,
           shape: l.isShape ? BoxShape.circle : BoxShape.rectangle,
@@ -1570,6 +1570,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     child: GestureDetector(
                       behavior: HitTestBehavior.opaque,
                       onTap: onKeyframeTap == null ? null : () => onKeyframeTap(keyTime),
+                      onHorizontalDragStart: onKeyframeMove == null ? null : (_) => _pushUndo(),
                       onHorizontalDragUpdate: onKeyframeMove == null
                           ? null
                           : (d) => onKeyframeMove(
@@ -1839,7 +1840,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             color: const Color(0xFF202735),
           ),
           child: Row(children: [
-            const Icon(Icons.auto_awesome_rounded, color: Color(0xFF43D9D2), size: 22),
+            const Icon(Icons.auto_awesome_rounded, color: Color(0xFF20E36F), size: 22),
             const SizedBox(width: 10),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const Text('EFFECT STUDIO', style: TextStyle(fontSize: 9, letterSpacing: 1.6, color: Colors.white70, fontWeight: FontWeight.w800)),
@@ -1881,7 +1882,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     width: current == i ? 1.5 : 1,
                   ),
                   boxShadow: current == i
-                      ? [BoxShadow(color: const Color(0xFF8B5CF6).withOpacity(.22), blurRadius: 14)]
+                      ? [BoxShadow(color: const Color(0xFF20E36F).withOpacity(.22), blurRadius: 14)]
                       : null,
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
@@ -2120,7 +2121,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           ]),
           const SizedBox(height: 8),
           const SizedBox(height: 14),
-          Row(children: [const Text('EASING GRAPH', style: TextStyle(fontSize: 10, color: Color(0xFF36DCC4), fontWeight: FontWeight.w900, letterSpacing: 1.2)), const Spacer(), Text('${(l.curveEase * 100).round()}% smooth', style: const TextStyle(fontSize: 10, color: Colors.white54))]),
+          Row(children: [const Text('EASING GRAPH', style: TextStyle(fontSize: 10, color: Color(0xFF20E36F), fontWeight: FontWeight.w900, letterSpacing: 1.2)), const Spacer(), Text('${(l.curveEase * 100).round()}% smooth', style: const TextStyle(fontSize: 10, color: Colors.white54))]),
           const SizedBox(height: 8),
           GestureDetector(onHorizontalDragUpdate: (d) => _ed(l, () => l.curveEase = (l.curveEase + d.delta.dx / 180).clamp(0.0, 1.0).toDouble()), child: Container(height: 116, decoration: BoxDecoration(color: const Color(0xFF101522), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)), child: CustomPaint(painter: _EaseGraphPainter(l.curveEase), child: const SizedBox.expand()))),
           Slider(value: l.curveEase, onChanged: (v) => _ed(l, () => l.curveEase = v)),
@@ -2319,7 +2320,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     if (choice == 'audio') await _addAudio();
   }
 
-  void _addSolidLayer() => _add(Layer.solid(const Offset(48, 48)));
+  void _addSolidLayer() => _add(Layer.solid(Offset.zero));
   void _addShapeLayer() => _add(Layer.shape(const Offset(70, 60)));
 
   void _addAdjustmentLayer() {
@@ -2369,7 +2370,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     color: const Color(0xFF202735),
                   ),
                   child: Row(children: [
-                    const Icon(Icons.layers_rounded, color: Color(0xFF43D9D2), size: 18),
+                    const Icon(Icons.layers_rounded, color: Color(0xFF20E36F), size: 18),
                     const SizedBox(width: 8),
                     Expanded(child: Text(
                       layer.isImage ? 'Photo overlay' : layer.isMesh ? 'Mesh layer' : layer.text,
@@ -2479,9 +2480,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             ]);
           }
           return Column(children: [
-            Expanded(flex: 45, child: _stage()),
+            Expanded(flex: 50, child: _stage()),
             _controls(),
-            Expanded(flex: 47, child: _timeline()),
+            Expanded(flex: 42, child: _timeline()),
             _toolbar(),
           ]);
         }),
