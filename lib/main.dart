@@ -306,6 +306,7 @@ class Layer {
   bool bold = true, italic = false, flipX = false, flipY = false, shadow = false, hidden = false;
   List<Offset> mesh = defaultMesh();
   List<KF> kfs = [];
+  double curveEase = .65;
 
   Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false;
   Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, text = 'Mesh';
@@ -333,6 +334,7 @@ class Layer {
       ..flipY = flipY
       ..shadow = shadow
       ..hidden = hidden
+      ..curveEase = curveEase
       ..parentIndex = parentIndex
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
@@ -364,12 +366,30 @@ class Layer {
         }
       }
     }
-    final f = a.t == b.t ? 0.0 : (ms - a.t) / (b.t - a.t);
+    var f = a.t == b.t ? 0.0 : (ms - a.t) / (b.t - a.t);
+    final smooth = f * f * (3 - 2 * f);
+    f = ui.lerpDouble(f, smooth, curveEase.clamp(0.0, 1.0))!;
     pos = Offset.lerp(a.pos, b.pos, f)!;
     scale = ui.lerpDouble(a.scale, b.scale, f)!;
     rot = ui.lerpDouble(a.rot, b.rot, f)!;
     opacity = ui.lerpDouble(a.opacity, b.opacity, f)!;
   }
+}
+
+class _EaseGraphPainter extends CustomPainter {
+  final double ease;
+  _EaseGraphPainter(this.ease);
+  @override
+  void paint(Canvas canvas, Size size) {
+    final grid = Paint()..color = Colors.white.withOpacity(.08)..strokeWidth = 1;
+    for (int i = 1; i < 4; i++) { final p = i * size.width / 4; canvas.drawLine(Offset(p, 0), Offset(p, size.height), grid); final q = i * size.height / 4; canvas.drawLine(Offset(0, q), Offset(size.width, q), grid); }
+    final path = Path()..moveTo(8, size.height - 8);
+    for (int i = 0; i <= 80; i++) { final x = i / 80; final smooth = x * x * (3 - 2 * x); final y = ui.lerpDouble(x, smooth, ease)!; path.lineTo(8 + x * (size.width - 16), size.height - 8 - y * (size.height - 16)); }
+    canvas.drawPath(path, Paint()..color = const Color(0xFF36DCC4)..strokeWidth = 3..style = PaintingStyle.stroke..strokeCap = StrokeCap.round);
+    for (final p in [Offset(8, size.height - 8), Offset(size.width - 8, 8)]) canvas.drawCircle(p, 4, Paint()..color = Colors.white);
+  }
+  @override
+  bool shouldRepaint(_EaseGraphPainter old) => old.ease != ease;
 }
 
 class AudioTrack {
@@ -1926,6 +1946,11 @@ class _EditorState extends State<Editor> {
             ),
           ]),
           const SizedBox(height: 8),
+          const SizedBox(height: 14),
+          Row(children: [const Text('EASING GRAPH', style: TextStyle(fontSize: 10, color: Color(0xFF36DCC4), fontWeight: FontWeight.w900, letterSpacing: 1.2)), const Spacer(), Text('${(l.curveEase * 100).round()}% smooth', style: const TextStyle(fontSize: 10, color: Colors.white54))]),
+          const SizedBox(height: 8),
+          GestureDetector(onHorizontalDragUpdate: (d) => _ed(l, () => l.curveEase = (l.curveEase + d.delta.dx / 180).clamp(0.0, 1.0).toDouble()), onTapDown: (d) { final box = context.findRenderObject() as RenderBox; final local = box.globalToLocal(d.globalPosition); _ed(l, () => l.curveEase = (local.dx / box.size.width).clamp(0.0, 1.0).toDouble()); }, child: Container(height: 116, decoration: BoxDecoration(color: const Color(0xFF101522), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)), child: CustomPaint(painter: _EaseGraphPainter(l.curveEase), child: const SizedBox.expand()))),
+          Slider(value: l.curveEase, onChanged: (v) => _ed(l, () => l.curveEase = v)),
           Wrap(spacing: 6, children: [
             for (final keyframe in l.kfs)
               ActionChip(
