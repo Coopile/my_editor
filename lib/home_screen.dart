@@ -69,6 +69,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (raw != null) {
       try {
         _projects = (jsonDecode(raw) as List).cast<Map<String, dynamic>>();
+        var migrated = false;
+        for (var i = 0; i < _projects.length; i++) {
+          if (_projects[i]['id'] == null) {
+            _projects[i]['id'] = 'legacy_project_$i';
+            migrated = true;
+          }
+        }
+        if (migrated) await _save();
       } catch (_) {
         _projects = [];
       }
@@ -101,7 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
     );
     if (name == null || name.isEmpty) return;
-    final project = {'name': name, 'updated': DateTime.now().toIso8601String()};
+    final project = {
+      'id': 'project_${DateTime.now().microsecondsSinceEpoch}',
+      'name': name,
+      'updated': DateTime.now().toIso8601String(),
+    };
     setState(() => _projects.insert(0, project));
     await _save();
     _open(project);
@@ -126,8 +138,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _open(Map<String, dynamic> project) {
+    final id = (project['id'] ?? project['name']).toString();
     Navigator.of(context).push(MaterialPageRoute(
-      builder: (_) => Editor(projectName: project['name'] as String),
+      builder: (_) => Editor(
+        projectName: project['name'] as String,
+        projectId: id,
+      ),
     ));
   }
 
