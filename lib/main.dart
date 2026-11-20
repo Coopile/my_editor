@@ -531,7 +531,7 @@ class _TimelineRulerPainter extends CustomPainter {
     final total = duration <= 0 ? 1.0 : duration;
     final base = Paint()..color = Colors.white24..strokeWidth = 1;
     final minor = Paint()..color = Colors.white12..strokeWidth = 1;
-    final active = Paint()..color = const Color(0xFF20E36F)..strokeWidth = 1.4;
+    final active = Paint()..color = const Color(0xFF79C8FF)..strokeWidth = 1.4;
     canvas.drawLine(Offset(0, size.height - 1), Offset(size.width, size.height - 1), base);
     final step = total > 45 ? 5 : total > 18 ? 2 : 1;
     for (int seconds = 0; seconds <= total.ceil(); seconds++) {
@@ -728,7 +728,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       ..fxStrength = (data['fxStrength'] as num? ?? 1).toDouble()
       ..fxSpeed = (data['fxSpeed'] as num? ?? 1).toDouble()
       ..pivot = Offset((pivot[0] as num).toDouble(), (pivot[1] as num).toDouble())
-      ..fx = (data['fx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1)
+      ..fx = (data['fx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1).toInt()
       ..color = Color((data['color'] as num? ?? Colors.white.value).toInt())
       ..bold = data['bold'] as bool? ?? true
       ..italic = data['italic'] as bool? ?? false
@@ -799,7 +799,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       _bookmarks
         ..clear()
         ..addAll((data['bookmarks'] as List? ?? []).map((v) => (v as num).toInt()));
-      _videoFx = (data['videoFx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1);
+      _videoFx = (data['videoFx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1).toInt();
       _videoFxStrength = (data['videoFxStrength'] as num? ?? 1).toDouble();
       _videoFxSpeed = (data['videoFxSpeed'] as num? ?? 1).toDouble();
       _brightness = (data['brightness'] as num? ?? 0).toDouble();
@@ -1964,7 +1964,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                         color: accent.withOpacity(visible ? .84 : .24),
                         borderRadius: BorderRadius.circular(3),
                         border: Border.all(
-                          color: selected ? const Color(0xFFB6FFCE) : accent.withOpacity(.8),
+                          color: selected ? const Color(0xFFD5EDFF) : accent.withOpacity(.8),
                           width: selected ? 1.4 : .7,
                         ),
                       ),
@@ -2086,7 +2086,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 _timelineTrack(
                   title: 'Video 1',
                   icon: Icons.movie_rounded,
-                  accent: const Color(0xFF20C56A),
+                  accent: const Color(0xFF65B8F4),
                   values: RangeValues(
                     (_trimStart / duration).clamp(0.0, 1.0).toDouble(),
                     (_trimEnd / duration).clamp(0.0, 1.0).toDouble(),
