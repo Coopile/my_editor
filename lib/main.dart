@@ -1766,7 +1766,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   void _scrubTimeline(double dx, double width) {
     if (width <= 0) return;
     final targetMs = (dx / width * _videoDuration * 1000).round();
-    final target = Duration(milliseconds: targetMs.clamp(0, (_videoDuration * 1000).round()));
+    final target = Duration(milliseconds: targetMs.clamp(0, (_videoDuration * 1000).round()).toInt());
     _pauseAudio();
     _lastAudioSyncBucket = -1;
     _vc?.seekTo(target);
