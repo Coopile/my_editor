@@ -462,6 +462,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   String? _videoPath;
   Size _stageSize = const Size(360, 230);
   Ticker? _playbackTicker;
+  final Stopwatch _previewStopwatch = Stopwatch();
+  int _previewAnchorMs = 0;
   int _tickDivider = 0;
 
   @override
@@ -475,13 +477,15 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         return;
       }
       if (++_tickDivider % 2 != 0) return;
-      final frameMs = controller.value.position.inMilliseconds;
+      final frameMs = _ms;
       for (final layer in _layers) { layer.apply(frameMs); }
       if (mounted) setState(() {});
     });
   }
 
-  int get _ms => _vc?.value.position.inMilliseconds ?? 0;
+  int get _ms => _vc?.value.isPlaying == true
+      ? _previewAnchorMs + _previewStopwatch.elapsedMilliseconds
+      : (_vc?.value.position.inMilliseconds ?? 0);
   double get _t {
     final d = _vc?.value.duration.inMilliseconds ?? 0;
     return d == 0 ? 0 : _ms / d;
@@ -567,6 +571,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     if (controller == null) return;
     if (controller.value.isPlaying) {
       await controller.pause();
+      _previewStopwatch.stop();
       _playbackTicker?.stop();
       await _pauseAudio();
     } else {
@@ -576,6 +581,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       await controller.setVolume(_vol);
       _lastAudioSyncBucket = -1;
       await controller.play();
+      _previewAnchorMs = controller.value.position.inMilliseconds;
+      _previewStopwatch..reset()..start();
       if (_playbackTicker?.isActive != true) _playbackTicker?.start();
       await _syncAudio();
     }
@@ -594,12 +601,15 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     controller.addListener(() {
       final position = controller.value.position;
       if (controller.value.isPlaying) {
+        _previewAnchorMs = position.inMilliseconds;
+        _previewStopwatch..reset()..start();
         final bucket = position.inMilliseconds ~/ 200;
         if (bucket != _lastAudioSyncBucket) {
           _lastAudioSyncBucket = bucket;
           _syncAudio();
         }
       }
+      if (!controller.value.isPlaying) _previewStopwatch.stop();
       if (!controller.value.isPlaying && mounted) setState(() {});
       if (controller.value.isPlaying &&
           _trimEnd > _trimStart &&
@@ -2255,6 +2265,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
 
   @override
   void dispose() {
+    _previewStopwatch.stop();
     _playbackTicker?.dispose();
     _vc?.dispose();
     for (final track in _audioTracks) {
