@@ -293,6 +293,8 @@ class KF {
 class Layer {
   final bool isMesh;
   final bool isImage;
+  final bool isNull;
+  int? parentIndex;
   String? imagePath;
   String text;
   Offset pos;
@@ -305,16 +307,13 @@ class Layer {
   List<Offset> mesh = defaultMesh();
   List<KF> kfs = [];
 
-  Layer.text(this.text, this.pos) : isMesh = false, isImage = false;
-  Layer.mesh(this.pos) : isMesh = true, isImage = false, text = 'Mesh';
-  Layer.image(this.imagePath, this.pos) : isMesh = false, isImage = true, text = 'Photo';
+  Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false;
+  Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, text = 'Mesh';
+  Layer.image(this.imagePath, this.pos) : isMesh = false, isImage = true, isNull = false, text = 'Photo';
+  Layer.nullObject(this.pos) : isMesh = false, isImage = false, isNull = true, text = 'Null';
 
   Layer _copyAt(Offset position) {
-    final clone = isMesh
-        ? Layer.mesh(position)
-        : isImage
-            ? Layer.image(imagePath, position)
-            : Layer.text(text, position);
+    final clone = isNull ? Layer.nullObject(position) : isMesh ? Layer.mesh(position) : isImage ? Layer.image(imagePath, position) : Layer.text(text, position);
     clone
       ..scale = scale
       ..rot = rot
@@ -334,6 +333,7 @@ class Layer {
       ..flipY = flipY
       ..shadow = shadow
       ..hidden = hidden
+      ..parentIndex = parentIndex
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
     return clone;
@@ -431,6 +431,7 @@ class _EditorState extends State<Editor> {
   final List<List<Layer>> _redoStack = [];
   int? _sel;
   int _videoFx = 0, _tab = 0;
+  String _fxCategory = 'All', _fxSearch = '';
   bool _pivotMode = false, _exporting = false;
   double _vol = 1;
   int _lastAudioSyncBucket = -1;
@@ -1136,7 +1137,9 @@ class _EditorState extends State<Editor> {
     }
     final al = FractionalOffset(l.pivot.dx, l.pivot.dy);
     Widget child;
-    if (l.isMesh) {
+    if (l.isNull) {
+      child = Container(width: 150, height: 96, decoration: BoxDecoration(color: const Color(0x2236DCC4), border: Border.all(color: const Color(0xFF36DCC4), width: 1.5), borderRadius: BorderRadius.circular(12)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.control_camera_rounded, color: Color(0xFF36DCC4), size: 30), SizedBox(height: 5), Text('NULL OBJECT', style: TextStyle(color: Color(0xFF36DCC4), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)), Text('Parent controller', style: TextStyle(color: Colors.white54, fontSize: 9))]));
+    } else if (l.isMesh) {
       child = SizedBox(
         width: 120, height: 120,
         child: Stack(clipBehavior: Clip.none, children: [
@@ -1433,7 +1436,7 @@ class _EditorState extends State<Editor> {
     final duration = _videoDuration;
     final selected = _sel != null && _sel! < _layers.length ? _sel! : null;
     return Container(
-      height: 184,
+      height: 250,
       margin: const EdgeInsets.fromLTRB(8, 5, 8, 5),
       padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
       decoration: BoxDecoration(
@@ -1450,7 +1453,9 @@ class _EditorState extends State<Editor> {
         Row(children: [
           const Icon(Icons.movie_filter_rounded, color: Color(0xFF43D9D2), size: 17),
           const SizedBox(width: 7),
-          const Text('TIMELINE', style: TextStyle(fontSize: 10, letterSpacing: 1.7, fontWeight: FontWeight.w900)),
+          const Text('EDIT TIMELINE', style: TextStyle(fontSize: 10, letterSpacing: 1.7, fontWeight: FontWeight.w900)),
+          const SizedBox(width: 7),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3), decoration: BoxDecoration(color: const Color(0x2236DCC4), borderRadius: BorderRadius.circular(6)), child: const Text('MULTI-LAYER', style: TextStyle(color: Color(0xFF36DCC4), fontSize: 8, fontWeight: FontWeight.w900))),
           const Spacer(),
           IconButton(
             visualDensity: VisualDensity.compact,
@@ -1523,17 +1528,17 @@ class _EditorState extends State<Editor> {
                 ),
               for (int i = 0; i < _layers.length; i++)
                 _timelineTrack(
-                  title: _layers[i].isMesh
+                  title: _layers[i].isNull ? 'Null object' : _layers[i].isMesh
                       ? 'Mesh overlay'
                       : _layers[i].isImage
                           ? 'Photo overlay'
                           : _layers[i].text,
-                  icon: _layers[i].isMesh
+                  icon: _layers[i].isNull ? Icons.control_camera_rounded : _layers[i].isMesh
                       ? Icons.grid_on
                       : _layers[i].isImage
                           ? Icons.image_rounded
                           : Icons.subtitles_rounded,
-                  accent: _layers[i].isImage
+                  accent: _layers[i].isNull ? const Color(0xFF36DCC4) : _layers[i].isImage
                       ? const Color(0xFFEC8BCB)
                       : _layers[i].isMesh
                           ? const Color(0xFF8B5CF6)
@@ -1652,11 +1657,15 @@ class _EditorState extends State<Editor> {
           ]),
         ),
         const SizedBox(height: 12),
-        const Text('MOTION · LIGHT · LENS · COLOR',
-            style: TextStyle(fontSize: 9, letterSpacing: 1.1, color: Colors.white38, fontWeight: FontWeight.w800)),
+        const Text('BROWSE EFFECTS', style: TextStyle(fontSize: 9, letterSpacing: 1.1, color: Colors.white38, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
+        Wrap(spacing: 6, runSpacing: 6, children: [for (final category in ['All', 'Motion', 'Distortion', 'Generators', 'Contour', 'Dynamics', 'Color', 'Light']) ChoiceChip(label: Text(category), selected: _fxCategory == category, onSelected: (_) => setState(() => _fxCategory = category))]),
+        const SizedBox(height: 8),
+        TextField(onChanged: (value) => setState(() => _fxSearch = value.toLowerCase()), decoration: const InputDecoration(isDense: true, prefixIcon: Icon(Icons.search_rounded), hintText: 'Search effects', border: OutlineInputBorder())),
+        const SizedBox(height: 10),
         Wrap(spacing: 9, runSpacing: 9, children: [
           for (int i = 0; i < fxLibrary.length; i++)
+            if (_effectMatches(i))
             InkWell(
               borderRadius: BorderRadius.circular(14),
               onTap: () => setState(() {
@@ -1987,6 +1996,23 @@ class _EditorState extends State<Editor> {
     }
   }
 
+  bool _effectMatches(int index) {
+    final name = fxLibrary[index].$1.toLowerCase();
+    if (_fxSearch.isNotEmpty && !name.contains(_fxSearch)) return false;
+    if (_fxCategory == 'All') return true;
+    final terms = switch (_fxCategory) {
+      'Motion' => ['shake', 'zoom pulse', 'spin', 'swing', 'wobble', 'drift', 'twitch'],
+      'Distortion' => ['bend', 'glitch', 'rgb split', 'pixelate', 'chromatic'],
+      'Generators' => ['film grain', 'flash', 'glow'],
+      'Contour' => ['vignette', 'shadow', 'sketch', 'comic'],
+      'Dynamics' => ['shake', 'zoom pulse', 'spin', 'flash', 'glitch'],
+      'Color' => ['gray', 'mono', 'noir', 'sepia', 'vintage', 'warm', 'cool', 'negative', 'invert', 'bright', 'dark', 'contrast', 'vivid', 'saturation', 'desaturate', 'golden', 'arctic', 'rose', 'violet', 'emerald', 'crimson', 'amber', 'cinematic', 'teal', 'dusty', 'pastel', 'neon', 'sunset', 'midnight', 'retro', 'polaroid', 'dreamscape', 'horror', 'washed', 'color pop'],
+      'Light' => ['glow', 'frost', 'brighten', 'flash', 'blur'],
+      _ => <String>[],
+    };
+    return terms.any(name.contains);
+  }
+
   Widget _panel() {
     final validSelection = _sel != null && _sel! >= 0 && _sel! < _layers.length;
     final layer = validSelection ? _layers[_sel!] : null;
@@ -2071,6 +2097,7 @@ class _EditorState extends State<Editor> {
           Expanded(child: _tool(Icons.title_rounded, 'Caption', _addText)),
           Expanded(child: _tool(Icons.graphic_eq_rounded, 'Audio', _addAudio)),
           Expanded(child: _tool(Icons.grid_on_rounded, 'Mesh', () => _add(Layer.mesh(const Offset(80, 40))))),
+          Expanded(child: _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70))))),
         ]),
       );
 
@@ -2086,7 +2113,7 @@ class _EditorState extends State<Editor> {
             gradient: LinearGradient(
               begin: Alignment.centerLeft,
               end: Alignment.centerRight,
-              colors: [Color(0xFF211A3F), Color(0xFF111B2B), Color(0xFF102B35)],
+              colors: [Color(0xFF1B2030), Color(0xFF141B2A), Color(0xFF102D32)],
             ),
           ),
         ),
@@ -2133,14 +2160,14 @@ class _EditorState extends State<Editor> {
                   _toolbar(),
                 ]),
               ),
-              SizedBox(width: 380, child: _panel()),
+              SizedBox(width: 340, child: _panel()),
             ]);
           }
           return Column(children: [
             Expanded(flex: 5, child: _stage()),
             _controls(),
             _timeline(),
-            Expanded(flex: 6, child: _panel()),
+            Expanded(flex: 4, child: _panel()),
             _toolbar(),
           ]);
         }),
