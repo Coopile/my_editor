@@ -319,6 +319,7 @@ class Layer {
   final bool isSolid;
   final bool isShape;
   final bool isAdjustment;
+  final bool isCamera;
   int? parentIndex;
   String? imagePath;
   String text;
@@ -335,16 +336,18 @@ class Layer {
   Offset curveHandle1 = const Offset(.42, 0);
   Offset curveHandle2 = const Offset(.58, 1);
 
-  Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false;
-  Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, text = 'Mesh';
-  Layer.image(this.imagePath, this.pos) : isMesh = false, isImage = true, isNull = false, isSolid = false, isShape = false, isAdjustment = false, text = 'Photo';
-  Layer.nullObject(this.pos) : isMesh = false, isImage = false, isNull = true, isSolid = false, isShape = false, isAdjustment = false, text = 'Null';
-  Layer.solid(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = true, isShape = false, isAdjustment = false, text = 'Solid Color';
-  Layer.shape(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = true, isAdjustment = false, text = 'Shape';
-  Layer.adjustment(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = true, text = 'Adjustment';
+  Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false;
+  Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false, text = 'Mesh';
+  Layer.image(this.imagePath, this.pos) : isMesh = false, isImage = true, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false, text = 'Photo';
+  Layer.nullObject(this.pos) : isMesh = false, isImage = false, isNull = true, isSolid = false, isShape = false, isAdjustment = false, isCamera = false, text = 'Null';
+  Layer.solid(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = true, isShape = false, isAdjustment = false, isCamera = false, text = 'Solid Color';
+  Layer.shape(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = true, isAdjustment = false, isCamera = false, text = 'Shape';
+  Layer.adjustment(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = true, isCamera = false, text = 'Adjustment';
+  Layer.camera(this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = true, text = 'Camera';
+  bool get isController => isNull || isCamera;
 
   Layer _copyAt(Offset position) {
-    final clone = isNull ? Layer.nullObject(position) : isSolid ? Layer.solid(position) : isShape ? Layer.shape(position) : isAdjustment ? Layer.adjustment(position) : isMesh ? Layer.mesh(position) : isImage ? Layer.image(imagePath, position) : Layer.text(text, position);
+    final clone = isCamera ? Layer.camera(position) : isNull ? Layer.nullObject(position) : isSolid ? Layer.solid(position) : isShape ? Layer.shape(position) : isAdjustment ? Layer.adjustment(position) : isMesh ? Layer.mesh(position) : isImage ? Layer.image(imagePath, position) : Layer.text(text, position);
     clone
       ..scale = scale
       ..rot = rot
@@ -623,6 +626,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   int _videoFx = 0, _tab = 0;
   String _fxCategory = 'All', _fxSearch = '';
   bool _pivotMode = false, _exporting = false;
+  double _previewZoom = 1.0;
   double _vol = 1;
   int _lastAudioSyncBucket = -1;
   double _trimStart = 0, _trimEnd = 0;
@@ -680,7 +684,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }
 
   Map<String, dynamic> _encodeLayer(Layer layer) => {
-    'type': layer.isNull ? 'null' : layer.isSolid ? 'solid' :
+    'type': layer.isCamera ? 'camera' : layer.isNull ? 'null' : layer.isSolid ? 'solid' :
       layer.isShape ? 'shape' : layer.isAdjustment ? 'adjustment' :
       layer.isMesh ? 'mesh' : layer.isImage ? 'image' : 'text',
     'imagePath': layer.imagePath, 'text': layer.text,
@@ -706,6 +710,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final pos = Offset((p[0] as num).toDouble(), (p[1] as num).toDouble());
     final type = data['type'];
     final layer = switch (type) {
+      'camera' => Layer.camera(pos),
       'null' => Layer.nullObject(pos),
       'solid' => Layer.solid(pos),
       'shape' => Layer.shape(pos),
@@ -1255,12 +1260,45 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     });
   }
 
+  bool _wouldCreateParentCycle(int childIndex, int proposedParent) {
+    var cursor = proposedParent;
+    final visited = <int>{};
+    while (cursor >= 0 && cursor < _layers.length && visited.add(cursor)) {
+      if (cursor == childIndex) return true;
+      final next = _layers[cursor].parentIndex;
+      if (next == null) return false;
+      cursor = next;
+    }
+    return false;
+  }
+
+  void _addCamera() => _add(Layer.camera(const Offset(120, 85)));
+  void _addNull() => _add(Layer.nullObject(const Offset(90, 90)));
+
+  void _addKeyframeNow() {
+    if (_sel == null || _sel! >= _layers.length) return;
+    _ed(_layers[_sel!], () => _layers[_sel!].upsert(_ms));
+  }
+
+  void _removeKeyframeAtPlayhead() {
+    if (_sel == null || _sel! >= _layers.length) return;
+    final layer = _layers[_sel!];
+    final index = layer.kfs.indexWhere((key) => (key.t - _ms).abs() < 60);
+    if (index < 0) return;
+    _pushUndo();
+    setState(() => layer.kfs.removeAt(index));
+  }
+
   void _deleteSelected() {
     final index = _sel;
     if (index == null || index < 0 || index >= _layers.length) return;
     _pushUndo();
     setState(() {
       _layers.removeAt(index);
+      for (final layer in _layers) {
+        if (layer.parentIndex == index) layer.parentIndex = null;
+        else if (layer.parentIndex != null && layer.parentIndex! > index) layer.parentIndex = layer.parentIndex! - 1;
+      }
       _sel = _layers.isEmpty ? null : math.min(index, _layers.length - 1).toInt();
       _pivotMode = false;
     });
@@ -1675,12 +1713,14 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   Widget _layerView(int i) {
     final l = _layers[i];
     final sel = _sel == i;
-    if (l.hidden || (_vc != null && (_t < l.start || _t > l.end))) {
+    if ((l.hidden && !l.isController) || (_vc != null && (_t < l.start || _t > l.end))) {
       return const SizedBox.shrink();
     }
     final al = FractionalOffset(l.pivot.dx, l.pivot.dy);
     Widget child;
-    if (l.isNull) {
+    if (l.isCamera) {
+      child = Container(width: 118, height: 72, decoration: BoxDecoration(color: const Color(0x222F9BDB), border: Border.all(color: const Color(0xFF79C8FF), width: 1.6), borderRadius: BorderRadius.circular(10)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.videocam_rounded, color: Color(0xFF79C8FF), size: 27), Text('CAMERA', style: TextStyle(color: Color(0xFF79C8FF), fontSize: 10, fontWeight: FontWeight.w900))]));
+    } else if (l.isNull) {
       child = Container(width: 150, height: 96, decoration: BoxDecoration(color: const Color(0x2220E36F), border: Border.all(color: const Color(0xFF20E36F), width: 1.5), borderRadius: BorderRadius.circular(12)), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.control_camera_rounded, color: Color(0xFF20E36F), size: 30), SizedBox(height: 5), Text('NULL OBJECT', style: TextStyle(color: Color(0xFF20E36F), fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 1.4)), Text('Parent controller', style: TextStyle(color: Colors.white54, fontSize: 9))]));
     } else if (l.isAdjustment) {
       child = Container(width: 172, height: 58, decoration: BoxDecoration(color: const Color(0x2220E36F), border: Border.all(color: const Color(0xFF20E36F)), borderRadius: BorderRadius.circular(8)), child: const Row(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.tune_rounded, color: Color(0xFF20E36F)), SizedBox(width: 8), Text('ADJUSTMENT LAYER', style: TextStyle(color: Color(0xFF20E36F), fontWeight: FontWeight.w900, fontSize: 10))]));
@@ -1768,8 +1808,20 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         ),
       ]);
     }
-    final parent = l.parentIndex != null && l.parentIndex! >= 0 && l.parentIndex! < _layers.length ? _layers[l.parentIndex!] : null;
-    final visualPosition = parent == null ? l.pos : l.pos + parent.pos;
+    var visualPosition = l.pos;
+    var visualScale = l.scale;
+    var visualRotation = l.rot;
+    var visualOpacity = l.opacity;
+    var parentIndex = l.parentIndex;
+    final visitedParents = <int>{i};
+    while (parentIndex != null && parentIndex >= 0 && parentIndex < _layers.length && visitedParents.add(parentIndex)) {
+      final parent = _layers[parentIndex];
+      visualPosition = parent.pos + Offset(visualPosition.dx * parent.scale, visualPosition.dy * parent.scale);
+      visualScale *= parent.scale;
+      visualRotation += parent.rot;
+      visualOpacity *= parent.opacity;
+      parentIndex = parent.parentIndex;
+    }
     return Positioned(
       left: visualPosition.dx, top: visualPosition.dy,
       child: GestureDetector(
@@ -1777,14 +1829,14 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         onDoubleTap: () => setState(() { _sel = i; _pivotMode = !_pivotMode; }),
         onPanUpdate: (d) => _ed(l, () { _sel = i; l.pos += d.delta; }),
         child: Opacity(
-          opacity: l.opacity.clamp(0, 1).toDouble(),
+          opacity: visualOpacity.clamp(0, 1).toDouble(),
           child: Transform(
             alignment: al,
             transform: Matrix4.identity()
               ..setEntry(1, 0, l.bend)
-              ..rotateZ(l.rot)
+              ..rotateZ(visualRotation)
               ..multiply(Matrix4.diagonal3Values(
-                  l.scale * (l.flipX ? -1 : 1), l.scale * (l.flipY ? -1 : 1), 1)),
+                  visualScale * (l.flipX ? -1 : 1), visualScale * (l.flipY ? -1 : 1), 1)),
             child: child,
           ),
         ),
@@ -1900,12 +1952,17 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           child: Text(_previewFull ? 'Fit' : 'Full', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
         ),
         control(Icons.bookmark_border_rounded, 'Add bookmark', _addBookmark),
+        control(Icons.remove_rounded, 'Zoom out', () => setState(() => _previewZoom = (_previewZoom - .1).clamp(.5, 2.5).toDouble())),
+        TextButton(onPressed: () => setState(() => _previewZoom = 1), style: TextButton.styleFrom(foregroundColor: Colors.white70, padding: const EdgeInsets.symmetric(horizontal: 3), minimumSize: const Size(30, 30)), child: const Text('Reset', style: TextStyle(fontSize: 9))),
+        control(Icons.add_rounded, 'Zoom in', () => setState(() => _previewZoom = (_previewZoom + .1).clamp(.5, 2.5).toDouble())),
         const Spacer(),
         control(Icons.skip_previous_rounded, 'Previous frame', _vc == null ? null : () => _seekFrames(-1)),
         control(_vc?.value.isPlaying == true ? Icons.pause_rounded : Icons.play_arrow_rounded, 'Play or pause', _vc == null ? null : _togglePlayback, color: const Color(0xFF20E36F)),
         control(Icons.skip_next_rounded, 'Next frame', _vc == null ? null : () => _seekFrames(1)),
         const Spacer(),
         control(Icons.layers_rounded, 'Layer properties', _openInspectorSheet),
+        control(Icons.diamond_rounded, 'Add keyframe', _sel == null ? null : _addKeyframeNow, color: const Color(0xFF79C8FF)),
+        control(Icons.delete_outline_rounded, 'Delete selected layer', _sel == null ? null : _deleteSelected, color: Colors.redAccent),
         control(Icons.undo_rounded, 'Undo', _undoStack.isEmpty ? null : _undo),
         control(Icons.redo_rounded, 'Redo', _redoStack.isEmpty ? null : _redo),
       ]),
@@ -2160,9 +2217,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               for (int i = _layers.length - 1; i >= 0; i--)
                 _timelineTrack(
                   title: _layers[i].text,
-                  icon: _layers[i].isNull
-                      ? Icons.control_camera_rounded
-                      : _layers[i].isAdjustment
+                  icon: _layers[i].isCamera
+                      ? Icons.videocam_rounded
+                      : _layers[i].isNull
+                          ? Icons.control_camera_rounded
+                          : _layers[i].isAdjustment
                           ? Icons.tune_rounded
                           : _layers[i].isSolid
                               ? Icons.square_rounded
@@ -2173,9 +2232,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                                       : _layers[i].isImage
                                           ? Icons.image_rounded
                                           : Icons.title_rounded,
-                  accent: _layers[i].isNull
-                      ? const Color(0xFF26D977)
-                      : _layers[i].isAdjustment
+                  accent: _layers[i].isCamera
+                      ? const Color(0xFF79C8FF)
+                      : _layers[i].isNull
+                          ? const Color(0xFF26D977)
+                          : _layers[i].isAdjustment
                           ? const Color(0xFFFFB74D)
                           : _layers[i].isSolid
                               ? const Color(0xFF36A8FF)
@@ -2502,11 +2563,17 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           _s(l, 'Rotate', l.rot, -math.pi, math.pi, (v) => l.rot = v),
           _s(l, 'Pivot X', l.pivot.dx, 0, 1, (v) => l.pivot = Offset(v, l.pivot.dy)),
           _s(l, 'Pivot Y', l.pivot.dy, 0, 1, (v) => l.pivot = Offset(l.pivot.dx, v)),
-          if (!l.isNull && _layers.any((candidate) => candidate.isNull))
+          if (l.isCamera) ...[
+            _note('Layers parented to this camera inherit its position, rotation and zoom.'),
+            _s(l, 'Camera zoom', l.scale, .2, 4, (v) => l.scale = v),
+            _s(l, 'Camera rotation', l.rot, -math.pi, math.pi, (v) => l.rot = v),
+          ],
+          if (l.isController) _note('Parent other layers to this controller from their Transform tab.'),
+          if (!l.isController && _layers.any((candidate) => candidate.isController))
             DropdownButtonFormField<int?>(
               value: l.parentIndex,
-              decoration: const InputDecoration(labelText: 'Parent null object', border: OutlineInputBorder()),
-              items: [const DropdownMenuItem<int?>(value: null, child: Text('No parent')), for (int i = 0; i < _layers.length; i++) if (_layers[i].isNull && i != _sel) DropdownMenuItem<int?>(value: i, child: Text('Null ${i + 1}'))],
+              decoration: const InputDecoration(labelText: 'Parent layer', border: OutlineInputBorder()),
+              items: [const DropdownMenuItem<int?>(value: null, child: Text('No parent')), for (int i = 0; i < _layers.length; i++) if (_layers[i].isController && i != _sel && !_wouldCreateParentCycle(_sel!, i)) DropdownMenuItem<int?>(value: i, child: Text(_layers[i].text))],
               onChanged: (value) => _ed(l, () => l.parentIndex = value),
             ),
           Wrap(spacing: 8, children: [
@@ -2595,6 +2662,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               label: const Text('Add keyframe here'),
               onPressed: () => _ed(l, () => l.upsert(_ms)),
             ),
+            OutlinedButton.icon(onPressed: _removeKeyframeAtPlayhead, icon: const Icon(Icons.remove_circle_outline, size: 16), label: const Text('Remove at playhead')),
             OutlinedButton(
               onPressed: () => _ed(l, () => l.kfs.clear()),
               child: const Text('Clear all'),
@@ -2813,11 +2881,15 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         ListTile(leading: const Icon(Icons.video_library_rounded), title: const Text('Video'), subtitle: const Text('Import a video clip'), onTap: () => Navigator.pop(sheetContext, 'video')),
         ListTile(leading: const Icon(Icons.image_rounded), title: const Text('Photo or image'), onTap: () => Navigator.pop(sheetContext, 'photo')),
         ListTile(leading: const Icon(Icons.music_note_rounded), title: const Text('Audio'), onTap: () => Navigator.pop(sheetContext, 'audio')),
+        ListTile(leading: const Icon(Icons.videocam_rounded), title: const Text('Camera layer'), subtitle: const Text('Camera controller for parented layers'), onTap: () => Navigator.pop(sheetContext, 'camera')),
+        ListTile(leading: const Icon(Icons.control_camera_rounded), title: const Text('Null object'), subtitle: const Text('Group controller for parenting'), onTap: () => Navigator.pop(sheetContext, 'null')),
       ])),
     );
     if (choice == 'video') await _pickVideo();
     if (choice == 'photo') await _addPhoto();
     if (choice == 'audio') await _addAudio();
+    if (choice == 'camera') _addCamera();
+    if (choice == 'null') _addNull();
   }
 
   void _addSolidLayer() => _add(Layer.solid(Offset.zero));
