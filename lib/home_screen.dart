@@ -161,14 +161,15 @@ class _HomeScreenState extends State<HomeScreen> {
     await prefs.setString('editshift.exports', jsonEncode(_exports));
   }
 
-  void _open(Map<String, dynamic> project) {
+  Future<void> _open(Map<String, dynamic> project) async {
     final id = (project['id'] ?? project['name']).toString();
-    Navigator.of(context).push(MaterialPageRoute(
+    await Navigator.of(context).push(MaterialPageRoute(
       builder: (_) => Editor(
         projectName: project['name'] as String,
         projectId: id,
       ),
     ));
+    if (mounted) await _load();
   }
 
   @override
