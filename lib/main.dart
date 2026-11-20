@@ -1003,7 +1003,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           layer.end * totalDuration > trimStart &&
           layer.start * totalDuration < trimEnd).toList();
       final textLayers = _layers.where((layer) =>
-          !layer.isImage && !layer.isMesh && !layer.hidden &&
+          !layer.isImage && !layer.isMesh && !layer.isNull && !layer.hidden &&
           layer.text.trim().isNotEmpty &&
           layer.end * totalDuration > trimStart &&
           layer.start * totalDuration < trimEnd).toList();
@@ -2002,7 +2002,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           const SizedBox(height: 14),
           Row(children: [const Text('EASING GRAPH', style: TextStyle(fontSize: 10, color: Color(0xFF36DCC4), fontWeight: FontWeight.w900, letterSpacing: 1.2)), const Spacer(), Text('${(l.curveEase * 100).round()}% smooth', style: const TextStyle(fontSize: 10, color: Colors.white54))]),
           const SizedBox(height: 8),
-          GestureDetector(onHorizontalDragUpdate: (d) => _ed(l, () => l.curveEase = (l.curveEase + d.delta.dx / 180).clamp(0.0, 1.0).toDouble()), onTapDown: (d) { final box = context.findRenderObject() as RenderBox; final local = box.globalToLocal(d.globalPosition); _ed(l, () => l.curveEase = (local.dx / box.size.width).clamp(0.0, 1.0).toDouble()); }, child: Container(height: 116, decoration: BoxDecoration(color: const Color(0xFF101522), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)), child: CustomPaint(painter: _EaseGraphPainter(l.curveEase), child: const SizedBox.expand()))),
+          GestureDetector(onHorizontalDragUpdate: (d) => _ed(l, () => l.curveEase = (l.curveEase + d.delta.dx / 180).clamp(0.0, 1.0).toDouble()), child: Container(height: 116, decoration: BoxDecoration(color: const Color(0xFF101522), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)), child: CustomPaint(painter: _EaseGraphPainter(l.curveEase), child: const SizedBox.expand()))),
           Slider(value: l.curveEase, onChanged: (v) => _ed(l, () => l.curveEase = v)),
           Wrap(spacing: 6, children: [
             for (final keyframe in l.kfs)
