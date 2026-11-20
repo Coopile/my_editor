@@ -1450,12 +1450,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             final width = box.maxWidth;
             final left = (low / max * width).clamp(0.0, width).toDouble();
             final right = (high / max * width).clamp(left, width).toDouble();
-            final clipWidth = math.max(18.0, right - left);
+            final clipWidth = math.max(18.0, right - left).toDouble();
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onTap,
               child: Stack(children: [
                 Positioned.fill(child: Center(child: Container(height: 1, color: Colors.white10))),
+                Positioned(left: (_t.clamp(0.0, 1.0) * width).clamp(0.0, width - 1).toDouble(), top: 0, bottom: 0, width: 1, child: Container(color: const Color(0xFF36DCC4))),
                 Positioned(left: left, top: 7, width: clipWidth, height: 34,
                   child: GestureDetector(
                     onTap: onTap,
@@ -1477,13 +1478,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     ),
                   ),
                 ),
-                Positioned(left: (left - 3).clamp(0.0, width - 7), top: 5, width: 8, height: 38,
+                Positioned(left: (left - 3).clamp(0.0, width - 7).toDouble(), top: 5, width: 8, height: 38,
                   child: GestureDetector(behavior: HitTestBehavior.translucent,
                     onPanUpdate: (d) { final delta = d.delta.dx / width * max; onChanged(RangeValues((low + delta).clamp(0.0, high - .01).toDouble(), high)); },
                     child: Center(child: Container(width: 4, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)))),
                   ),
                 ),
-                Positioned(left: (right - 4).clamp(0.0, width - 7), top: 5, width: 8, height: 38,
+                Positioned(left: (right - 4).clamp(0.0, width - 7).toDouble(), top: 5, width: 8, height: 38,
                   child: GestureDetector(behavior: HitTestBehavior.translucent,
                     onPanUpdate: (d) { final delta = d.delta.dx / width * max; onChanged(RangeValues(low, (high + delta).clamp(low + .01, max).toDouble())); },
                     child: Center(child: Container(width: 4, height: 24, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)))),
