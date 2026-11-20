@@ -1348,6 +1348,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     );
   }
 
+
   Widget _stage() {
     final vc = _vc;
     return LayoutBuilder(builder: (context, constraints) {
@@ -1355,41 +1356,66 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       return GestureDetector(
         onTap: () => setState(() => _sel = null),
         child: Container(
-          decoration: const BoxDecoration(color: Color(0xFF10141D)),
+          color: const Color(0xFF000000),
           child: ClipRect(
             child: Stack(fit: StackFit.expand, children: [
-              if (vc != null)
-                Center(
-                  child: AspectRatio(
-                    aspectRatio: vc.value.aspectRatio,
-                    child: applyFx(
-                      _videoFx,
-                      ColorFiltered(
-                        colorFilter: ColorFilter.matrix(_adjustmentMatrix()),
-                        child: VideoPlayer(vc),
+              if (vc != null && !_videoHidden)
+                if (_previewFull)
+                  Positioned.fill(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: vc.value.size.width,
+                        height: vc.value.size.height,
+                        child: applyFx(
+                          _videoFx,
+                          ColorFiltered(
+                            colorFilter: ColorFilter.matrix(_adjustmentMatrix()),
+                            child: VideoPlayer(vc),
+                          ),
+                          strength: _videoFxStrength,
+                          speed: _videoFxSpeed,
+                          time: _ms / 1000,
+                        ),
                       ),
-                      strength: _videoFxStrength,
-                      speed: _videoFxSpeed,
-                      time: _ms / 1000,
+                    ),
+                  )
+                else
+                  Center(
+                    child: AspectRatio(
+                      aspectRatio: vc.value.aspectRatio,
+                      child: applyFx(
+                        _videoFx,
+                        ColorFiltered(
+                          colorFilter: ColorFilter.matrix(_adjustmentMatrix()),
+                          child: VideoPlayer(vc),
+                        ),
+                        strength: _videoFxStrength,
+                        speed: _videoFxSpeed,
+                        time: _ms / 1000,
+                      ),
+                    ),
+                  )
+              else if (_layers.isEmpty)
+                const Center(child: Text('PREVIEW', style: TextStyle(color: Colors.white24, fontSize: 11, letterSpacing: 2.2, fontWeight: FontWeight.w700))),
+              for (int i = 0; i < _layers.length; i++) _layerView(i),
+              if (_showGrid)
+                const Positioned.fill(
+                  child: IgnorePointer(
+                    child: GridPaper(
+                      color: Color(0x22FFFFFF),
+                      interval: 40,
+                      divisions: 2,
+                      subdivisions: 2,
                     ),
                   ),
-                )
-              else
-                const Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.movie_creation_outlined, size: 54, color: Color(0xFF8B5CF6)),
-                    SizedBox(height: 12),
-                    Text('Import a clip to start your edit', style: TextStyle(color: Colors.white70)),
-                  ]),
                 ),
-              for (int i = 0; i < _layers.length; i++) _layerView(i),
             ]),
           ),
         ),
       );
     });
   }
-
 
   void _seekFrames(int frameDelta) {
     final controller = _vc;
@@ -2353,79 +2379,74 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     );
   }
 
-  Widget _tool(IconData icon, String label, VoidCallback onTap) => InkWell(
-        borderRadius: BorderRadius.circular(14),
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 7),
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Container(
-              width: 38,
-              height: 34,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                color: const Color(0xFF273243),
-              ),
-              child: Icon(icon, size: 19, color: Colors.white),
-            ),
-            const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w700)),
-          ]),
-        ),
-      );
+
+  Widget _tool(IconData icon, String label, VoidCallback onTap) => Expanded(
+    child: InkWell(
+      onTap: onTap,
+      child: SizedBox(
+        height: 76,
+        child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          Icon(icon, size: 25, color: Colors.white),
+          const SizedBox(height: 5),
+          Text(label, maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w600)),
+        ]),
+      ),
+    ),
+  );
 
   Widget _toolbar() => Container(
-        padding: const EdgeInsets.fromLTRB(6, 5, 6, 6),
-        decoration: const BoxDecoration(
-          color: Color(0xFF0D101B),
-          border: Border(top: BorderSide(color: Colors.white10)),
-        ),
-        child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-          Expanded(child: _tool(Icons.video_library_rounded, 'Video', _pickVideo)),
-          Expanded(child: _tool(Icons.add_photo_alternate_rounded, 'Photo', _addPhoto)),
-          Expanded(child: _tool(Icons.title_rounded, 'Caption', _addText)),
-          Expanded(child: _tool(Icons.graphic_eq_rounded, 'Audio', _addAudio)),
-          Expanded(child: _tool(Icons.grid_on_rounded, 'Mesh', () => _add(Layer.mesh(const Offset(80, 40))))),
-          Expanded(child: _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70))))),
-        ]),
-      );
+    height: 78,
+    color: const Color(0xFF070809),
+    padding: const EdgeInsets.symmetric(horizontal: 4),
+    decoration: const BoxDecoration(border: Border(top: BorderSide(color: Color(0xFF242629)))),
+    child: Row(children: [
+      _tool(Icons.folder_open_rounded, 'Media', _openMediaMenu),
+      _tool(Icons.text_fields_rounded, 'Text', _addText),
+      _tool(Icons.texture_rounded, 'Solid', _addSolidLayer),
+      _tool(Icons.layers_rounded, 'Adjustment', _addAdjustmentLayer),
+      _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70)))),
+      _tool(Icons.category_rounded, 'Shape', _addShapeLayer),
+    ]),
+  );
+
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFF000000),
       appBar: AppBar(
-        backgroundColor: const Color(0xFF101321),
+        toolbarHeight: 44,
+        backgroundColor: const Color(0xFF08090B),
         foregroundColor: Colors.white,
         elevation: 0,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(color: Color(0xFF171D29)),
-        ),
+        titleSpacing: 14,
         title: Text(
           widget.projectName,
-          style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: -.4, fontSize: 17),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: .1),
         ),
         actions: [
           if (_pivotMode)
-            const Padding(
+            const Center(child: Padding(
               padding: EdgeInsets.only(right: 8),
-              child: Center(
-                child: Text('PIVOT MODE', style: TextStyle(color: Color(0xFF43D9D2), fontSize: 9, fontWeight: FontWeight.w900)),
-              ),
-            ),
+              child: Text('PIVOT', style: TextStyle(color: Color(0xFF20E36F), fontSize: 9, fontWeight: FontWeight.w900)),
+            )),
           Padding(
             padding: const EdgeInsets.only(right: 8),
-            child: FilledButton.icon(
+            child: FilledButton(
               onPressed: _exporting ? null : _exportVideo,
-              icon: _exporting
-                  ? const SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Icon(Icons.ios_share_rounded, size: 16),
-              label: Text(_exporting ? 'Rendering' : 'Export'),
               style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF16BFA8),
-                foregroundColor: const Color(0xFF07120F),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(13)),
+                backgroundColor: const Color(0xFF20E36F),
+                foregroundColor: const Color(0xFF04140A),
+                minimumSize: const Size(64, 31),
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
               ),
+              child: _exporting
+                  ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF04140A)))
+                  : const Text('Export', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 11)),
             ),
           ),
         ],
@@ -2437,20 +2458,19 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               Expanded(
                 flex: 3,
                 child: Column(children: [
-                  Expanded(child: _stage()),
+                  Expanded(flex: 5, child: _stage()),
                   _controls(),
-                  _timeline(),
+                  Expanded(flex: 5, child: _timeline()),
                   _toolbar(),
                 ]),
               ),
-              SizedBox(width: 340, child: _panel()),
+              SizedBox(width: 320, child: _panel()),
             ]);
           }
           return Column(children: [
-            Expanded(flex: 5, child: _stage()),
+            Expanded(flex: 45, child: _stage()),
             _controls(),
-            _timeline(),
-            Expanded(flex: 4, child: _panel()),
+            Expanded(flex: 47, child: _timeline()),
             _toolbar(),
           ]);
         }),
