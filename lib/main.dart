@@ -1463,27 +1463,6 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               child: Stack(children: [
                 Positioned.fill(child: Center(child: Container(height: 1, color: Colors.white10))),
                 Positioned(left: (_t.clamp(0.0, 1.0) * width).clamp(0.0, width - 1).toDouble(), top: 0, bottom: 0, width: 1, child: Container(color: const Color(0xFF36DCC4))),
-                for (final keyTime in keyframeTimes)
-                  Positioned(
-                    left: ((keyTime / 1000 / _videoDuration.clamp(.001, double.infinity)) * width - 5).clamp(0.0, width - 10).toDouble(),
-                    top: 15,
-                    width: 10,
-                    height: 10,
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: onKeyframeTap == null ? null : () => onKeyframeTap(keyTime),
-                      child: Transform.rotate(
-                        angle: math.pi / 4,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: selected ? const Color(0xFFFFD76A) : Colors.white,
-                            border: Border.all(color: const Color(0xFF10141D), width: 1.2),
-                            borderRadius: BorderRadius.circular(1.5),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
                 Positioned(left: left, top: 7, width: clipWidth, height: 34,
                   child: GestureDetector(
                     onTap: onTap,
@@ -1505,6 +1484,27 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     ),
                   ),
                 ),
+                for (final keyTime in keyframeTimes)
+                  Positioned(
+                    left: ((keyTime / 1000 / _videoDuration.clamp(.001, double.infinity)) * width - 5).clamp(0.0, width - 10).toDouble(),
+                    top: 15,
+                    width: 10,
+                    height: 10,
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: onKeyframeTap == null ? null : () => onKeyframeTap(keyTime),
+                      child: Transform.rotate(
+                        angle: math.pi / 4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: selected ? const Color(0xFFFFD76A) : Colors.white,
+                            border: Border.all(color: const Color(0xFF10141D), width: 1.2),
+                            borderRadius: BorderRadius.circular(1.5),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
                 Positioned(left: (left - 3).clamp(0.0, width - 7).toDouble(), top: 5, width: 8, height: 38,
                   child: GestureDetector(behavior: HitTestBehavior.translucent,
                     onPanUpdate: (d) { final delta = d.delta.dx / width * max; onChanged(RangeValues((low + delta).clamp(0.0, high - .01).toDouble(), high)); },
@@ -1529,9 +1529,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final duration = _videoDuration;
     final selected = _sel != null && _sel! < _layers.length ? _sel! : null;
     return Container(
-      height: 250,
-      margin: const EdgeInsets.fromLTRB(8, 5, 8, 5),
-      padding: const EdgeInsets.fromLTRB(12, 9, 12, 7),
+      height: 290,
+      margin: const EdgeInsets.fromLTRB(4, 3, 4, 3),
+      padding: const EdgeInsets.fromLTRB(8, 6, 8, 5),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(22),
         color: const Color(0xFF151A24),
