@@ -399,6 +399,47 @@ class _EaseGraphPainter extends CustomPainter {
   bool shouldRepaint(_EaseGraphPainter old) => old.ease != ease;
 }
 
+
+class _TimelineRulerPainter extends CustomPainter {
+  final double duration;
+  final double currentSeconds;
+  final List<int> bookmarks;
+  _TimelineRulerPainter({required this.duration, required this.currentSeconds, required this.bookmarks});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final total = duration <= 0 ? 1.0 : duration;
+    final base = Paint()..color = Colors.white24..strokeWidth = 1;
+    final minor = Paint()..color = Colors.white12..strokeWidth = 1;
+    final active = Paint()..color = const Color(0xFF20E36F)..strokeWidth = 1.4;
+    canvas.drawLine(Offset(0, size.height - 1), Offset(size.width, size.height - 1), base);
+    final step = total > 45 ? 5 : total > 18 ? 2 : 1;
+    for (int seconds = 0; seconds <= total.ceil(); seconds++) {
+      final x = seconds / total * size.width;
+      final major = seconds % step == 0;
+      canvas.drawLine(Offset(x, major ? 12 : 21), Offset(x, size.height), major ? base : minor);
+      if (major) {
+        final painter = TextPainter(
+          text: TextSpan(text: seconds.toString(), style: const TextStyle(color: Colors.white54, fontSize: 9, fontWeight: FontWeight.w600)),
+          textDirection: TextDirection.ltr,
+        )..layout();
+        painter.paint(canvas, Offset(x + 3, 1));
+      }
+    }
+    for (final mark in bookmarks) {
+      final x = mark / 1000 / total * size.width;
+      canvas.drawLine(Offset(x, 11), Offset(x, size.height), Paint()..color = const Color(0xFFFFD45B)..strokeWidth = 1.3);
+    }
+    final playheadX = (currentSeconds / total * size.width).clamp(0.0, size.width).toDouble();
+    canvas.drawLine(Offset(playheadX, 0), Offset(playheadX, size.height), active);
+  }
+
+  @override
+  bool shouldRepaint(_TimelineRulerPainter old) =>
+      old.duration != duration || old.currentSeconds != currentSeconds || old.bookmarks.length != bookmarks.length ||
+      old.bookmarks.join(',') != bookmarks.join(',');
+}
+
 class AudioTrack {
   final String path;
   final String title;
@@ -1349,87 +1390,57 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     });
   }
 
-  Widget _controls() {
-    final vc = _vc;
-    final pos = vc?.value.position ?? Duration.zero;
-    final dur = vc?.value.duration ?? Duration.zero;
-    return Row(children: [
-      IconButton(
-        iconSize: 36,
-        icon: Icon(vc?.value.isPlaying == true ? Icons.pause_circle : Icons.play_circle),
-        onPressed: vc == null ? null : _togglePlayback,
-      ),
-      Expanded(
-        child: Slider(
-          value: pos.inMilliseconds.clamp(0, dur.inMilliseconds).toDouble(),
-          max: dur.inMilliseconds > 0 ? dur.inMilliseconds.toDouble() : 1,
-          onChanged: vc == null ? null : (v) {
-            _pauseAudio();
-            _lastAudioSyncBucket = -1;
-            vc.seekTo(Duration(milliseconds: v.toInt()));
-          },
-        ),
-      ),
-      Padding(
-        padding: const EdgeInsets.only(right: 12),
-        child: Text('${_fmt(pos)} / ${_fmt(dur)}', style: const TextStyle(fontSize: 12)),
-      ),
-    ]);
+
+  void _seekFrames(int frameDelta) {
+    final controller = _vc;
+    if (controller == null) return;
+    final frameMs = (1000 / 30).round();
+    final next = (_ms + frameDelta * frameMs).clamp(0, controller.value.duration.inMilliseconds).toInt();
+    _pauseAudio();
+    controller.seekTo(Duration(milliseconds: next));
   }
 
-  Widget _track(String label, Color color, double s, double e, {bool sel = false}) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(children: [
-          Expanded(flex: (s * 1000).round() + 1, child: const SizedBox()),
-          Expanded(
-            flex: ((e - s) * 1000).round() + 1,
-            child: Container(
-              height: 28, alignment: Alignment.centerLeft, padding: const EdgeInsets.only(left: 8),
-              decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(6),
-                  border: sel ? Border.all(color: Colors.blue, width: 2) : null),
-              child: Text(label, style: const TextStyle(fontSize: 12), overflow: TextOverflow.clip),
-            ),
-          ),
-          Expanded(flex: ((1 - e) * 1000).round() + 1, child: const SizedBox()),
-        ]),
-      );
+  void _addBookmark() {
+    if (_bookmarks.any((time) => (time - _ms).abs() < 90)) return;
+    setState(() {
+      _bookmarks.add(_ms);
+      _bookmarks.sort();
+    });
+  }
 
-  Widget _s(Layer l, String t, double v, double mn, double mx, void Function(double) f) =>
-      Row(children: [
-        SizedBox(width: 72, child: Text(t, style: const TextStyle(fontSize: 13))),
-        Expanded(child: Slider(value: v.clamp(mn, mx).toDouble(), min: mn, max: mx, onChanged: (x) => _ed(l, () => f(x)))),
-      ]);
-
-  Widget _globalS(
-    String label,
-    double value,
-    double min,
-    double max,
-    ValueChanged<double> onChanged, {
-    String suffix = '',
-  }) =>
-      Padding(
-        padding: const EdgeInsets.symmetric(vertical: 3),
-        child: Row(children: [
-          SizedBox(width: 82, child: Text(label, style: const TextStyle(fontSize: 12))),
-          Expanded(
-            child: Slider(
-              value: value.clamp(min, max).toDouble(),
-              min: min,
-              max: max,
-              onChanged: onChanged,
-            ),
-          ),
-          SizedBox(
-            width: 38,
-            child: Text(
-              '${value.toStringAsFixed(1)}$suffix',
-              textAlign: TextAlign.end,
-              style: const TextStyle(color: Colors.white54, fontSize: 10),
-            ),
-          ),
-        ]),
-      );
+  Widget _controls() {
+    Widget control(IconData icon, String tooltip, VoidCallback? action, {Color color = Colors.white70}) =>
+        IconButton(
+          tooltip: tooltip,
+          onPressed: action,
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 36, height: 44),
+          icon: Icon(icon, size: 20, color: color),
+        );
+    return Container(
+      height: 48,
+      color: const Color(0xFF08090B),
+      padding: const EdgeInsets.symmetric(horizontal: 5),
+      child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+        control(Icons.grid_view_rounded, 'Toggle grid', () => setState(() => _showGrid = !_showGrid), color: _showGrid ? const Color(0xFF20E36F) : Colors.white70),
+        TextButton(
+          onPressed: () => setState(() => _previewFull = !_previewFull),
+          style: TextButton.styleFrom(foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 7), minimumSize: const Size(42, 36)),
+          child: Text(_previewFull ? 'Fit' : 'Full', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+        ),
+        control(Icons.bookmark_border_rounded, 'Add bookmark', _addBookmark),
+        const Spacer(),
+        control(Icons.skip_previous_rounded, 'Previous frame', _vc == null ? null : () => _seekFrames(-1)),
+        control(_vc?.value.isPlaying == true ? Icons.pause_rounded : Icons.play_arrow_rounded, 'Play or pause', _vc == null ? null : _togglePlayback, color: const Color(0xFF20E36F)),
+        control(Icons.skip_next_rounded, 'Next frame', _vc == null ? null : () => _seekFrames(1)),
+        const Spacer(),
+        control(Icons.layers_rounded, 'Layer properties', _openInspectorSheet),
+        control(Icons.undo_rounded, 'Undo', _undoStack.isEmpty ? null : _undo),
+        control(Icons.redo_rounded, 'Redo', _redoStack.isEmpty ? null : _redo),
+      ]),
+    );
+  }
 
   Widget _timelineTrack({
     required String title,
