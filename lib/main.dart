@@ -632,6 +632,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   Size _stageSize = const Size(360, 230);
   bool _showGrid = false, _previewFull = false, _videoHidden = false;
   final List<int> _bookmarks = [];
+  int? _draggingBookmarkTime;
   Ticker? _playbackTicker;
   final Stopwatch _previewStopwatch = Stopwatch();
   int _previewAnchorMs = 0;
@@ -2085,7 +2086,36 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTapDown: (d) => _scrubTimeline(d.localPosition.dx, box.maxWidth),
-              onHorizontalDragUpdate: (d) => _scrubTimeline(d.localPosition.dx, box.maxWidth),
+              onHorizontalDragStart: (d) {
+                final targetMs = (d.localPosition.dx / box.maxWidth * duration * 1000).round();
+                int? nearest;
+                var nearestDistance = double.infinity;
+                for (final marker in _bookmarks) {
+                  final distance = (marker - targetMs).abs().toDouble();
+                  if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearest = marker;
+                  }
+                }
+                final threshold = (duration * 1000 / box.maxWidth * 22).round();
+                _draggingBookmarkTime = nearest != null && nearestDistance <= threshold ? nearest : null;
+              },
+              onHorizontalDragUpdate: (d) {
+                final marker = _draggingBookmarkTime;
+                if (marker == null) {
+                  _scrubTimeline(d.localPosition.dx, box.maxWidth);
+                  return;
+                }
+                final next = (d.localPosition.dx / box.maxWidth * duration * 1000)
+                    .round().clamp(0, (duration * 1000).round()).toInt();
+                setState(() {
+                  final index = _bookmarks.indexOf(marker);
+                  if (index >= 0) _bookmarks[index] = next;
+                  _bookmarks.sort();
+                  _draggingBookmarkTime = next;
+                });
+              },
+              onHorizontalDragEnd: (_) => _draggingBookmarkTime = null,
               child: Stack(children: [
                 Positioned.fill(child: CustomPaint(painter: rulerPainter)),
                 Positioned(
