@@ -2565,6 +2565,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                   },
                 ),
               for (int i = _layers.length - 1; i >= 0; i--)
+                ...[
                 _timelineTrack(
                   title: _layers[i].text,
                   icon: _layers[i].isCamera
@@ -2624,7 +2625,6 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     _layers[i].end = range.end;
                   }),
                 ),
-              for (int i = _layers.length - 1; i >= 0; i--)
                 if (_layers[i].fx != 0 || _layers[i].effectKfs.isNotEmpty)
                   _timelineTrack(
                     title: '   ↳ Effect · ${fxLibrary[_layers[i].fx].$1}',
@@ -2637,8 +2637,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     keyframeTimes: _layers[i].effectKfs.map((key) => key.t).toList(),
                     onTap: () { setState(() => _sel = i); _tab = tabs.indexWhere((tab) => tab.$1 == 'Effects'); _openInspectorSheet(); },
                     onKeyframeTap: (time) { _vc?.seekTo(Duration(milliseconds: time)); setState(() => _sel = i); _tab = tabs.indexWhere((tab) => tab.$1 == 'Effects'); _openInspectorSheet(); },
+                    onKeyframeMove: (oldTime, newTime) => _moveEffectKeyframe(i, oldTime, newTime),
                     onChanged: (_) {},
                   ),
+                ],
               for (int i = 0; i < _audioTracks.length; i++)
                 _timelineTrack(
                   title: _audioTracks[i].title,
@@ -3221,6 +3223,18 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     setState(() {
       layer.kfs[keyIndex].t = newTime.clamp(0, math.max(1, limit)).toInt();
       layer.kfs.sort((a, b) => a.t.compareTo(b.t));
+    });
+  }
+
+  void _moveEffectKeyframe(int layerIndex, int oldTime, int newTime) {
+    if (layerIndex < 0 || layerIndex >= _layers.length) return;
+    final keys = _layers[layerIndex].effectKfs;
+    final index = keys.indexWhere((key) => (key.t - oldTime).abs() < 36);
+    if (index < 0) return;
+    final limit = (_vc?.value.duration.inMilliseconds ?? (_videoDuration * 1000).round()).toInt();
+    setState(() {
+      keys[index].t = newTime.clamp(0, math.max(1, limit)).toInt();
+      keys.sort((a, b) => a.t.compareTo(b.t));
     });
   }
 
