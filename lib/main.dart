@@ -336,6 +336,109 @@ class _GrainPainter extends CustomPainter {
       old.time.floor() != time.floor() || old.strength != strength;
 }
 
+class _EffectThumbnail extends StatefulWidget {
+  final int effectIndex;
+  const _EffectThumbnail({required this.effectIndex});
+
+  @override
+  State<_EffectThumbnail> createState() => _EffectThumbnailState();
+}
+
+class _EffectThumbnailState extends State<_EffectThumbnail>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _clock;
+
+  @override
+  void initState() {
+    super.initState();
+    _clock = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1900),
+    )..repeat();
+  }
+
+  @override
+  void dispose() {
+    _clock.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(10),
+      child: AnimatedBuilder(
+        animation: _clock,
+        builder: (context, _) {
+          final t = _clock.value * math.pi * 2;
+          final sample = SizedBox.expand(
+            child: DecoratedBox(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Color(0xFF102F59), Color(0xFF17213B), Color(0xFF512B69)],
+                ),
+              ),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Positioned(
+                    left: 10 + math.sin(t) * 5,
+                    top: 8,
+                    child: const Icon(Icons.auto_awesome, size: 12, color: Color(0xFFFFC56F)),
+                  ),
+                  Positioned(
+                    right: 12,
+                    bottom: 8 + math.cos(t * .8) * 4,
+                    child: const Icon(Icons.circle, size: 9, color: Color(0xFF61DDF4)),
+                  ),
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: const RadialGradient(
+                        colors: [Color(0xFF8AEAFF), Color(0xFF2687E8), Color(0xFF263B88)],
+                      ),
+                      boxShadow: [
+                        BoxShadow(color: const Color(0xFF37BFFF).withOpacity(.48), blurRadius: 16),
+                      ],
+                    ),
+                    child: const Icon(Icons.rocket_launch_rounded, size: 27, color: Colors.white),
+                  ),
+                  Positioned(
+                    bottom: 5,
+                    left: 0,
+                    right: 0,
+                    child: Center(
+                      child: Container(
+                        width: 34,
+                        height: 3,
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(.5),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+          return applyFx(
+            widget.effectIndex,
+            sample,
+            time: t,
+            strength: .9,
+            speed: 1,
+          );
+        },
+      ),
+    );
+  }
+}
+
 List<double> _presetMatrix(int index) {
   final saturation = 0.35 + (index % 10) * 0.17;
   final contrast = 0.72 + ((index ~/ 10) % 5) * 0.22;
@@ -2822,11 +2925,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
               },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
-                width: 94,
-                height: 76,
-                padding: const EdgeInsets.all(8),
+                width: 108,
+                height: 112,
+                padding: const EdgeInsets.all(7),
                 decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(13),
                   color: current == i ? const Color(0xFF354052) : const Color(0xFF202735),
                   border: Border.all(
                     color: current == i ? const Color(0xFF20E36F) : Colors.white.withOpacity(.06),
@@ -2836,26 +2939,24 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       ? [BoxShadow(color: const Color(0xFF20E36F).withOpacity(.22), blurRadius: 14)]
                       : null,
                 ),
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Container(
-                    width: 40,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(9),
-                      gradient: LinearGradient(
-                        colors: [
-                          current == i ? const Color(0xFF20E36F).withOpacity(.42) : const Color(0xFF425A79),
-                          const Color(0xFF151D2B),
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: _EffectThumbnail(effectIndex: i),
                       ),
                     ),
-                    child: Icon(fxLibrary[i].$2, size: 21, color: current == i ? Colors.white : const Color(0xFFD8E8F5)),
-                  ),
-                  Text(fxLibrary[i].$1, maxLines: 2, overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
-                ]),
+                    const SizedBox(height: 6),
+                    Text(
+                      fxLibrary[i].$1,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
+                    ),
+                  ],
+                ),
               ),
             ),
         ]),
