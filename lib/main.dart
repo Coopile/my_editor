@@ -1831,12 +1831,33 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       }
       command.write('-c:v h264_videotoolbox -allow_sw 1 -b:v 6M -pix_fmt yuv420p -movflags +faststart ${_ffArg(outputPath)}');
 
-      final session = await FFmpegKit.execute(command.toString());
-      final returnCode = await session.getReturnCode();
+      // Try the platform hardware encoder first, then fall back to the
+      // bundled software encoder. Some iOS devices/build variants do not
+      // expose VideoToolbox through the packaged FFmpeg build.
+      var session = await FFmpegKit.execute(command.toString());
+      var returnCode = await session.getReturnCode();
       if (!ReturnCode.isSuccess(returnCode) || !File(outputPath).existsSync()) {
-        final logs = await session.getLogs();
-        final details = logs.map((log) => log.getMessage()).join('\n');
-        throw Exception(details.isEmpty ? 'FFmpeg export failed.' : details);
+        final firstLogs = await session.getLogs();
+        final firstDetails = firstLogs.map((log) => log.getMessage()).join('\n');
+        try {
+          final partial = File(outputPath);
+          if (await partial.exists()) await partial.delete();
+        } catch (_) {}
+        final hardwareCommand = command.toString();
+        final softwareCommand = hardwareCommand
+            .replaceFirst('-c:v h264_videotoolbox -allow_sw 1 -b:v 6M',
+                '-c:v libx264 -preset ultrafast -b:v 6M');
+        session = await FFmpegKit.execute(softwareCommand);
+        returnCode = await session.getReturnCode();
+        if (!ReturnCode.isSuccess(returnCode) || !File(outputPath).existsSync()) {
+          final logs = await session.getLogs();
+          final details = logs.map((log) => log.getMessage()).join('\n');
+          final usefulDetails = details.trim().isNotEmpty ? details : firstDetails;
+          final tail = usefulDetails.split('\n').where((line) => line.trim().isNotEmpty).toList();
+          throw Exception(tail.isEmpty
+              ? 'FFmpeg export failed with both hardware and software encoders.'
+              : tail.skip(math.max(0, tail.length - 18)).join('\n'));
+        }
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -2721,10 +2742,14 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           _globalS('Intensity', _videoFxStrength, 0, 2, (v) => setState(() => _videoFxStrength = v)),
           _globalS('Speed', _videoFxSpeed, .2, 3, (v) => setState(() => _videoFxSpeed = v), suffix: '×'),
         ] else ...[
-          _s(l, 'Intensity', l.fxStrength, 0, 2, (v) => l.fxStrength = v),
-          _s(l, 'Speed', l.fxSpeed, .2, 3, (v) => l.fxSpeed = v),
+          _s(l, currentName == 'Wave Warp' ? 'Wave Height' : 'Intensity',
+              l.fxStrength, 0, 2, (v) => l.fxStrength = v),
+          _s(l, currentName == 'Wave Warp' ? 'Wave Speed' : 'Speed',
+              l.fxSpeed, .2, 3, (v) => l.fxSpeed = v),
           if (currentName == 'Bend')
             _s(l, 'Bend', l.bend, -0.8, 0.8, (v) => l.bend = v),
+          if (currentName == 'Wave Warp')
+            _note('Wave Warp displaces horizontal image bands over time. Height controls the wave amplitude; Speed controls its motion.'),
         ],
       ];
     }
