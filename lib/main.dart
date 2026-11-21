@@ -377,6 +377,7 @@ class Layer {
       ..curveEase = curveEase
       ..curveHandle1 = curveHandle1
       ..curveHandle2 = curveHandle2
+      ..curveCyclic = curveCyclic
       ..parentIndex = parentIndex
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
@@ -2540,6 +2541,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         onPressed: () => _ed(layer, () {
           layer.curveHandle1 = first;
           layer.curveHandle2 = second;
+          layer.curveCyclic = false;
         }),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
