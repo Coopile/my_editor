@@ -628,6 +628,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   final List<AudioTrack> _audioTracks = [];
   final List<List<Layer>> _undoStack = [];
   final List<List<Layer>> _redoStack = [];
+  final Set<int> _multiSelection = <int>{};
+  bool _multiSelectMode = false;
   int? _sel;
   int _videoFx = 0, _tab = 0;
   String _fxCategory = 'All', _fxSearch = '';
@@ -1279,6 +1281,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     return false;
   }
 
+  void _openEditorTab(String tab) {
+    final index = tabs.indexWhere((item) => item.$1 == tab);
+    if (index < 0) return;
+    setState(() => _tab = index);
+    _openInspectorSheet();
+  }
+
   void _addCamera() => _add(Layer.camera(const Offset(120, 85)));
   void _addNull() => _add(Layer.nullObject(const Offset(90, 90)));
 
@@ -1321,14 +1330,23 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 onTap: () => Navigator.pop(sheetContext, i),
               ),
           if (!_layers.any((layer) => layer.isController))
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text('Add a Null or Camera layer first to use parenting.'),
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline_rounded),
+              title: const Text('Create Null parent'),
+              onTap: () => Navigator.pop(sheetContext, -2),
             ),
         ]),
       ),
     );
     if (parent == null) return;
+    if (parent == -2) {
+      final controllerIndex = _layers.length;
+      _add(Layer.nullObject(const Offset(90, 90))..text = 'Parent Null');
+      if (child < _layers.length) {
+        _ed(_layers[child], () => _layers[child].parentIndex = controllerIndex);
+      }
+      return;
+    }
     _ed(_layers[child], () => _layers[child].parentIndex = parent < 0 ? null : parent);
   }
 
@@ -2106,6 +2124,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onTap,
+              onLongPress: onLongPress,
               onHorizontalDragUpdate: (d) {
                 final target = ((d.localPosition.dx / width).clamp(0.0, 1.0) * safeMax);
                 final span = high - low;
@@ -2728,8 +2747,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         return [
           _s(l, 'Position X', l.pos.dx, 0, 600, (v) => l.pos = Offset(v, l.pos.dy)),
           _s(l, 'Position Y', l.pos.dy, 0, 400, (v) => l.pos = Offset(l.pos.dx, v)),
-          _s(l, 'Size', l.scale, .3, 3, (v) => l.scale = v),
-          _s(l, 'Rotate', l.rot, -math.pi, math.pi, (v) => l.rot = v),
+          _s(l, 'Scale', l.scale, .1, 4, (v) => l.scale = v),
+          _s(l, 'Rotate', l.rot * 180 / math.pi, -180, 180, (v) => l.rot = v * math.pi / 180),
+          _s(l, 'Skew', l.bend, -.8, .8, (v) => l.bend = v),
           _s(l, 'Pivot X', l.pivot.dx, 0, 1, (v) => l.pivot = Offset(v, l.pivot.dy)),
           _s(l, 'Pivot Y', l.pivot.dy, 0, 1, (v) => l.pivot = Offset(l.pivot.dx, v)),
           if (l.isCamera) ...[
@@ -2737,7 +2757,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             _s(l, 'Camera zoom', l.scale, .2, 4, (v) => l.scale = v),
             _s(l, 'Camera rotation', l.rot, -math.pi, math.pi, (v) => l.rot = v),
           ],
-          if (l.isController) _note('Parent other layers to this controller from their Transform tab.'),
+          if (l.isController) _note('Parent other layers to this controller with the Parent button.'),
           if (!l.isController && _layers.any((candidate) => candidate.isController))
             DropdownButtonFormField<int?>(
               value: l.parentIndex,
@@ -3131,7 +3151,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }
 
 
-  Widget _tool(IconData icon, String label, VoidCallback onTap) => Expanded(
+  Widget _tool(IconData icon, String label, VoidCallback onTap) => SizedBox(
+    width: 70,
     child: InkWell(
       onTap: onTap,
       child: SizedBox(
@@ -3153,14 +3174,21 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       color: Color(0xFF070809),
       border: Border(top: BorderSide(color: Color(0xFF242629))),
     ),
-    child: Row(children: [
-      _tool(Icons.folder_open_rounded, 'Media', _openMediaMenu),
-      _tool(Icons.text_fields_rounded, 'Text', _addText),
-      _tool(Icons.texture_rounded, 'Solid', _addSolidLayer),
-      _tool(Icons.layers_rounded, 'Adjustment', _addAdjustmentLayer),
-      _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70)))),
-      _tool(Icons.category_rounded, 'Shape', _addShapeLayer),
-    ]),
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _tool(Icons.folder_open_rounded, 'Media', _openMediaMenu),
+        _tool(Icons.text_fields_rounded, 'Text', _addText),
+        _tool(Icons.texture_rounded, 'Solid', _addSolidLayer),
+        _tool(Icons.layers_rounded, 'Adjustment', _addAdjustmentLayer),
+        _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70)))),
+        _tool(Icons.category_rounded, 'Shape', _addShapeLayer),
+        _tool(Icons.open_with_rounded, 'Transform', () => _openEditorTab('Transform')),
+        _tool(Icons.auto_awesome_rounded, 'Effects', () => _openEditorTab('Effects')),
+        _tool(Icons.account_tree_rounded, 'Parent', _parentSelectedLayer),
+        _tool(Icons.group_work_rounded, 'Group', _groupSelectedLayers),
+      ]),
+    ),
   );
 
 
