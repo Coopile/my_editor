@@ -372,6 +372,7 @@ class Layer {
   final bool isAdjustment;
   final bool isCamera;
   int? parentIndex;
+  int? groupId;
   String? imagePath;
   String text;
   Offset pos;
@@ -424,6 +425,7 @@ class Layer {
       ..curveHandle2 = curveHandle2
       ..curveCyclic = curveCyclic
       ..parentIndex = parentIndex
+      ..groupId = groupId
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
     return clone;
@@ -1423,17 +1425,52 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       return;
     }
     _pushUndo();
-    final group = Layer.nullObject(const Offset(90, 90))..text = 'Group ${_layers.length + 1}';
+    final groupId = _layers.fold<int>(0, (highest, layer) =>
+        layer.groupId == null ? highest : math.max(highest, layer.groupId!)) + 1;
     setState(() {
-      final groupIndex = _layers.length;
-      _layers.add(group);
       for (final index in selected) {
-        _layers[index].parentIndex = groupIndex;
+        _layers[index].groupId = groupId;
       }
-      _sel = groupIndex;
+      _sel = selected.last;
       _multiSelection.clear();
       _multiSelectMode = false;
     });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Grouped ${selected.length} layers. No Null object was created.')),
+    );
+  }
+
+  void _createParentForSelectedLayers() {
+    final selected = (_multiSelectMode && _multiSelection.isNotEmpty
+        ? _multiSelection
+        : <int>{if (_sel != null) _sel!})
+        .where((i) => i >= 0 && i < _layers.length)
+        .toList()
+      ..sort();
+    if (selected.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Select one or more layers first.')),
+      );
+      return;
+    }
+    final parentIndex = _layers.length;
+    _pushUndo();
+    setState(() {
+      final parent = Layer.nullObject(const Offset(90, 90))
+        ..text = 'Parent ${parentIndex + 1}';
+      _layers.add(parent);
+      for (final index in selected) {
+        if (index != parentIndex && !_wouldCreateParentCycle(index, parentIndex)) {
+          _layers[index].parentIndex = parentIndex;
+        }
+      }
+      _sel = parentIndex;
+      _multiSelection.clear();
+      _multiSelectMode = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Created parent for ${selected.length} layer${selected.length == 1 ? '' : 's'}.')),
+    );
   }
 
   void _addKeyframeNow() {
@@ -3351,6 +3388,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         _tool(Icons.open_with_rounded, 'Transform', () => _openEditorTab('Transform')),
         _tool(Icons.auto_awesome_rounded, 'Effects', () => _openEditorTab('Effects')),
         _tool(Icons.account_tree_rounded, 'Parent', _parentSelectedLayer),
+        _tool(Icons.add_link_rounded, 'Create Parent', _createParentForSelectedLayers),
         _tool(Icons.group_work_rounded, 'Group', _groupSelectedLayers),
       ]),
     ),
