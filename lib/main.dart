@@ -363,6 +363,12 @@ class KF {
   KF(this.t, this.pos, this.scale, this.rot, this.opacity);
 }
 
+class EffectKF {
+  int t;
+  double strength, speed;
+  EffectKF(this.t, this.strength, this.speed);
+}
+
 class Layer {
   final bool isMesh;
   final bool isImage;
@@ -384,6 +390,7 @@ class Layer {
   bool bold = true, italic = false, flipX = false, flipY = false, shadow = false, hidden = false;
   List<Offset> mesh = defaultMesh();
   List<KF> kfs = [];
+  List<EffectKF> effectKfs = [];
   double curveEase = .65;
   Offset curveHandle1 = const Offset(.42, 0);
   Offset curveHandle2 = const Offset(.58, 1);
@@ -427,7 +434,8 @@ class Layer {
       ..parentIndex = parentIndex
       ..groupId = groupId
       ..mesh = List.of(mesh)
-      ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
+      ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList()
+      ..effectKfs = effectKfs.map((k) => EffectKF(k.t, k.strength, k.speed)).toList();
     return clone;
   }
 
@@ -716,6 +724,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   int _tickDivider = 0;
   Timer? _autosaveTimer;
   bool _restoringProject = false;
+  StateSetter? _inspectorSheetSetState;
 
   @override
   void initState() {
@@ -769,6 +778,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     'color': layer.color.value, 'bold': layer.bold, 'italic': layer.italic,
     'flipX': layer.flipX, 'flipY': layer.flipY, 'shadow': layer.shadow,
     'hidden': layer.hidden, 'parentIndex': layer.parentIndex, 'groupId': layer.groupId,
+    'effectKeyframes': layer.effectKfs.map((key) => {'t': key.t, 'strength': key.strength, 'speed': key.speed}).toList(),
     'mesh': layer.mesh.map((p) => [p.dx, p.dy]).toList(),
     'keyframes': layer.kfs.map((k) => {
       't': k.t, 'pos': [k.pos.dx, k.pos.dy], 'scale': k.scale,
@@ -828,6 +838,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       )).toList();
     }
     final keys = data['keyframes'] as List? ?? [];
+    layer.effectKfs = ((data['effectKeyframes'] as List?) ?? []).map((item) {
+      final key = Map<String, dynamic>.from(item as Map);
+      return EffectKF((key['t'] as num).toInt(), (key['strength'] as num? ?? 1).toDouble(), (key['speed'] as num? ?? 1).toDouble());
+    }).toList()..sort((a, b) => a.t.compareTo(b.t));
     layer.kfs = keys.map((item) {
       final key = Map<String, dynamic>.from(item as Map);
       final kp = key['pos'] as List;
@@ -973,12 +987,34 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     });
   }
 
+  void _refreshInspector() {
+    if (mounted) setState(() {});
+    _inspectorSheetSetState?.call(() {});
+  }
+
   void _ed(Layer l, VoidCallback f) {
     _pushUndo();
     setState(() {
       f();
       if (l.kfs.isNotEmpty) l.upsert(_ms);
     });
+    _inspectorSheetSetState?.call(() {});
+  }
+
+  void _addEffectKeyframe(Layer layer) {
+    _pushUndo();
+    layer.effectKfs.removeWhere((key) => (key.t - _ms).abs() < 60);
+    layer.effectKfs.add(EffectKF(_ms, layer.fxStrength, layer.fxSpeed));
+    layer.effectKfs.sort((a, b) => a.t.compareTo(b.t));
+    _refreshInspector();
+  }
+
+  void _removeEffectKeyframe(Layer layer) {
+    final index = layer.effectKfs.indexWhere((key) => (key.t - _ms).abs() < 60);
+    if (index < 0) return;
+    _pushUndo();
+    layer.effectKfs.removeAt(index);
+    _refreshInspector();
   }
 
   // Shared slider used by the layer inspector. Keep the compact, flat
@@ -2577,6 +2613,21 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     _layers[i].end = range.end;
                   }),
                 ),
+              for (int i = _layers.length - 1; i >= 0; i--)
+                if (_layers[i].fx != 0 || _layers[i].effectKfs.isNotEmpty)
+                  _timelineTrack(
+                    title: '   ↳ Effect · ${fxLibrary[_layers[i].fx].$1}',
+                    icon: Icons.auto_awesome_rounded,
+                    accent: const Color(0xFFB78BFF),
+                    values: RangeValues(_layers[i].start, _layers[i].end),
+                    max: 1,
+                    selected: selected == i,
+                    visible: !_layers[i].hidden,
+                    keyframeTimes: _layers[i].effectKfs.map((key) => key.t).toList(),
+                    onTap: () { setState(() => _sel = i); _tab = tabs.indexWhere((tab) => tab.$1 == 'Effects'); _openInspectorSheet(); },
+                    onKeyframeTap: (time) { _vc?.seekTo(Duration(milliseconds: time)); setState(() => _sel = i); _tab = tabs.indexWhere((tab) => tab.$1 == 'Effects'); _openInspectorSheet(); },
+                    onChanged: (_) {},
+                  ),
               for (int i = 0; i < _audioTracks.length; i++)
                 _timelineTrack(
                   title: _audioTracks[i].title,
@@ -2629,7 +2680,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           scrollDirection: Axis.horizontal,
           itemCount: tabs.length,
           itemBuilder: (_, i) => InkWell(
-            onTap: () => setState(() => _tab = i),
+            onTap: () {
+              setState(() => _tab = i);
+              _inspectorSheetSetState?.call(() {});
+            },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 180),
               curve: Curves.easeOut,
@@ -2723,14 +2777,14 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             if (_effectMatches(i))
             InkWell(
               borderRadius: BorderRadius.circular(14),
-              onTap: () => setState(() {
+              onTap: () {
                 if (l == null) {
-                  _videoFx = i;
+                  setState(() => _videoFx = i);
                 } else {
-                  _pushUndo();
-                  l.fx = i;
+                  _ed(l, () => l.fx = i);
                 }
-              }),
+                _inspectorSheetSetState?.call(() {});
+              },
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 160),
                 width: 94,
@@ -2776,6 +2830,12 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           _globalS('Intensity', _videoFxStrength, 0, 2, (v) => setState(() => _videoFxStrength = v)),
           _globalS('Speed', _videoFxSpeed, .2, 3, (v) => setState(() => _videoFxSpeed = v), suffix: '×'),
         ] else ...[
+          Row(children: [
+            const Expanded(child: Text('EFFECT KEYFRAMES', style: TextStyle(fontSize: 9, letterSpacing: 1.1, color: Colors.white54, fontWeight: FontWeight.w800))),
+            TextButton.icon(onPressed: () => _addEffectKeyframe(l), icon: const Icon(Icons.diamond_outlined, size: 15), label: const Text('Add at playhead')),
+            IconButton(tooltip: 'Remove effect keyframe at playhead', onPressed: () => _removeEffectKeyframe(l), icon: const Icon(Icons.remove_circle_outline, size: 18)),
+          ]),
+          Text('${l.effectKfs.length} effect keyframe${l.effectKfs.length == 1 ? '' : 's'}', style: const TextStyle(fontSize: 10, color: Colors.white38)),
           _s(l, currentName == 'Wave Warp' ? 'Wave Height' : 'Intensity',
               l.fxStrength, 0, 2, (v) => l.fxStrength = v),
           _s(l, currentName == 'Wave Warp' ? 'Wave Speed' : 'Speed',
@@ -3161,11 +3221,15 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       useSafeArea: true,
       backgroundColor: const Color(0xFF111214),
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(12))),
-      builder: (sheetContext) => SizedBox(
-        height: MediaQuery.of(sheetContext).size.height * .68,
-        child: _panel(),
-      ),
+      builder: (sheetContext) => StatefulBuilder(builder: (context, sheetSetState) {
+        _inspectorSheetSetState = sheetSetState;
+        return SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .78,
+          child: _panel(),
+        );
+      }),
     );
+    _inspectorSheetSetState = null;
   }
 
   Future<void> _showLayerActions(int index) async {
