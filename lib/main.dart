@@ -300,7 +300,7 @@ class _WaveWarp extends StatelessWidget {
           ),
         ),
     ]));
-  }
+  });
 }
 
 class _WaveBandClipper extends CustomClipper<Rect> {
@@ -1523,10 +1523,6 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Shake':
         final drift = (.025 * amount).toStringAsFixed(4);
         return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
-      case 'Wave Warp':
-        final amplitude = (8 * strength).toStringAsFixed(2);
-        final wavelength = (80 / strength.clamp(.25, 2)).toStringAsFixed(2);
-        return "geq=lum='lum(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cb='cb(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cr='cr(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)'";
       case 'Scale Assist':
         return "scale=w='iw*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame,crop=iw/1.06:ih/1.06";
       case 'Zoom Pulse':
