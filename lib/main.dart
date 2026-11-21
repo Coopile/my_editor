@@ -448,6 +448,27 @@ class Layer {
     kfs.sort((a, b) => a.t - b.t);
   }
 
+  void applyEffect(int ms) {
+    if (effectKfs.isEmpty) return;
+    var a = effectKfs.first, b = effectKfs.last;
+    if (ms <= a.t) {
+      b = a;
+    } else if (ms >= b.t) {
+      a = b;
+    } else {
+      for (int i = 0; i < effectKfs.length - 1; i++) {
+        if (ms >= effectKfs[i].t && ms <= effectKfs[i + 1].t) {
+          a = effectKfs[i];
+          b = effectKfs[i + 1];
+          break;
+        }
+      }
+    }
+    final progress = a.t == b.t ? 0.0 : _bezierProgress((ms - a.t) / (b.t - a.t), curveHandle1, curveHandle2);
+    fxStrength = ui.lerpDouble(a.strength, b.strength, progress)!;
+    fxSpeed = ui.lerpDouble(a.speed, b.speed, progress)!;
+  }
+
   void apply(int ms) {
     if (kfs.isEmpty) return;
     var a = kfs.first, b = kfs.last;
@@ -2052,6 +2073,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             )),
       );
     }
+    l.applyEffect(_ms);
     child = applyFx(
       l.fx,
       child,
