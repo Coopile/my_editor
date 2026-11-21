@@ -103,6 +103,7 @@ const fxLibrary = [
   ('Color Pop', Icons.auto_awesome),
   ('Chromatic', Icons.auto_awesome),
   ('Bend', Icons.auto_awesome),
+  ('Wave Warp', Icons.waves_rounded),
   ('Shake', Icons.vibration),
   ('Scale Assist', Icons.zoom_in),
   ('Zoom Pulse', Icons.zoom_in),
@@ -146,6 +147,8 @@ Widget applyFx(
           child: w,
         ),
       );
+    case 'Wave Warp':
+      return _WaveWarp(child: w, time: time, strength: amount, speed: speed);
     case 'Scale Assist':
       return Transform.scale(
         scale: 1 + math.sin(time * 2.4 * speed) * .028 * amount,
@@ -265,6 +268,48 @@ Widget applyFx(
       ? _m[key]!.map((e) => e.toDouble()).toList()
       : _presetMatrix(i);
   return ColorFiltered(colorFilter: ColorFilter.matrix(matrix), child: w);
+}
+
+
+
+/// A lightweight animated horizontal displacement effect. Each clipped band
+/// is shifted by a sine wave, so the preview shows a genuine wave-like warp.
+class _WaveWarp extends StatelessWidget {
+  final Widget child;
+  final double time, strength, speed;
+  const _WaveWarp({required this.child, required this.time, required this.strength, required this.speed});
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(builder: (context, constraints) {
+    final size = Size(constraints.maxWidth, constraints.maxHeight);
+    if (!size.width.isFinite || !size.height.isFinite || size.width <= 0 || size.height <= 0) {
+      return child;
+    }
+    const bands = 18;
+    final bandHeight = size.height / bands;
+    final amplitude = 8.0 * strength;
+    return SizedBox.fromSize(size: size, child: Stack(clipBehavior: Clip.hardEdge, children: [
+      for (int i = 0; i < bands; i++)
+        Positioned.fill(
+          child: ClipRect(
+            clipper: _WaveBandClipper(top: i * bandHeight, bottom: (i + 1) * bandHeight),
+            child: Transform.translate(
+              offset: Offset(math.sin((i / bands * math.pi * 2) + time * 2.0 * speed) * amplitude, 0),
+              child: child,
+            ),
+          ),
+        ),
+    ]));
+  }
+}
+
+class _WaveBandClipper extends CustomClipper<Rect> {
+  final double top, bottom;
+  const _WaveBandClipper({required this.top, required this.bottom});
+  @override
+  Rect getClip(Size size) => Rect.fromLTRB(0, top, size.width, bottom);
+  @override
+  bool shouldReclip(_WaveBandClipper old) => top != old.top || bottom != old.bottom;
 }
 
 class _GrainPainter extends CustomPainter {
@@ -1471,9 +1516,17 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final speed = _videoFxSpeed.clamp(.1, 3.0).toDouble();
     if (name == 'None' || name == 'Bend') return '';
     switch (name) {
+      case 'Wave Warp':
+        final amplitude = (8 * amount).toStringAsFixed(2);
+        final wavelength = (80 / amount.clamp(.25, 2)).toStringAsFixed(2);
+        return "geq=lum='lum(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cb='cb(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cr='cr(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)'";
       case 'Shake':
         final drift = (.025 * amount).toStringAsFixed(4);
         return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
+      case 'Wave Warp':
+        final amplitude = (8 * strength).toStringAsFixed(2);
+        final wavelength = (80 / strength.clamp(.25, 2)).toStringAsFixed(2);
+        return "geq=lum='lum(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cb='cb(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cr='cr(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)'";
       case 'Scale Assist':
         return "scale=w='iw*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame,crop=iw/1.06:ih/1.06";
       case 'Zoom Pulse':
@@ -1778,12 +1831,33 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       }
       command.write('-c:v h264_videotoolbox -allow_sw 1 -b:v 6M -pix_fmt yuv420p -movflags +faststart ${_ffArg(outputPath)}');
 
-      final session = await FFmpegKit.execute(command.toString());
-      final returnCode = await session.getReturnCode();
+      // Try the platform hardware encoder first, then fall back to the
+      // bundled software encoder. Some iOS devices/build variants do not
+      // expose VideoToolbox through the packaged FFmpeg build.
+      var session = await FFmpegKit.execute(command.toString());
+      var returnCode = await session.getReturnCode();
       if (!ReturnCode.isSuccess(returnCode) || !File(outputPath).existsSync()) {
-        final logs = await session.getLogs();
-        final details = logs.map((log) => log.getMessage()).join('\n');
-        throw Exception(details.isEmpty ? 'FFmpeg export failed.' : details);
+        final firstLogs = await session.getLogs();
+        final firstDetails = firstLogs.map((log) => log.getMessage()).join('\n');
+        try {
+          final partial = File(outputPath);
+          if (await partial.exists()) await partial.delete();
+        } catch (_) {}
+        final hardwareCommand = command.toString();
+        final softwareCommand = hardwareCommand
+            .replaceFirst('-c:v h264_videotoolbox -allow_sw 1 -b:v 6M',
+                '-c:v libx264 -preset ultrafast -b:v 6M');
+        session = await FFmpegKit.execute(softwareCommand);
+        returnCode = await session.getReturnCode();
+        if (!ReturnCode.isSuccess(returnCode) || !File(outputPath).existsSync()) {
+          final logs = await session.getLogs();
+          final details = logs.map((log) => log.getMessage()).join('\n');
+          final usefulDetails = details.trim().isNotEmpty ? details : firstDetails;
+          final tail = usefulDetails.split('\n').where((line) => line.trim().isNotEmpty).toList();
+          throw Exception(tail.isEmpty
+              ? 'FFmpeg export failed with both hardware and software encoders.'
+              : tail.skip(math.max(0, tail.length - 18)).join('\n'));
+        }
       }
 
       final prefs = await SharedPreferences.getInstance();
@@ -2668,10 +2742,14 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           _globalS('Intensity', _videoFxStrength, 0, 2, (v) => setState(() => _videoFxStrength = v)),
           _globalS('Speed', _videoFxSpeed, .2, 3, (v) => setState(() => _videoFxSpeed = v), suffix: '×'),
         ] else ...[
-          _s(l, 'Intensity', l.fxStrength, 0, 2, (v) => l.fxStrength = v),
-          _s(l, 'Speed', l.fxSpeed, .2, 3, (v) => l.fxSpeed = v),
+          _s(l, currentName == 'Wave Warp' ? 'Wave Height' : 'Intensity',
+              l.fxStrength, 0, 2, (v) => l.fxStrength = v),
+          _s(l, currentName == 'Wave Warp' ? 'Wave Speed' : 'Speed',
+              l.fxSpeed, .2, 3, (v) => l.fxSpeed = v),
           if (currentName == 'Bend')
             _s(l, 'Bend', l.bend, -0.8, 0.8, (v) => l.bend = v),
+          if (currentName == 'Wave Warp')
+            _note('Wave Warp displaces horizontal image bands over time. Height controls the wave amplitude; Speed controls its motion.'),
         ],
       ];
     }
