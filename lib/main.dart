@@ -341,6 +341,7 @@ class Layer {
   double curveEase = .65;
   Offset curveHandle1 = const Offset(.42, 0);
   Offset curveHandle2 = const Offset(.58, 1);
+  bool curveCyclic = false;
 
   Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false;
   Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false, text = 'Mesh';
@@ -408,7 +409,9 @@ class Layer {
       }
     }
     var f = a.t == b.t ? 0.0 : (ms - a.t) / (b.t - a.t);
-    f = _bezierProgress(f, curveHandle1, curveHandle2);
+    f = curveCyclic
+        ? (f + .18 * math.sin(f * math.pi * 6)).clamp(0.0, 1.0).toDouble()
+        : _bezierProgress(f, curveHandle1, curveHandle2);
     pos = Offset.lerp(a.pos, b.pos, f)!;
     scale = ui.lerpDouble(a.scale, b.scale, f)!;
     rot = ui.lerpDouble(a.rot, b.rot, f)!;
@@ -438,7 +441,8 @@ double _bezierProgress(double x, Offset first, Offset second) {
 
 class _EaseGraphPainter extends CustomPainter {
   final Offset first, second;
-  _EaseGraphPainter(this.first, this.second);
+  final bool cyclic;
+  _EaseGraphPainter(this.first, this.second, this.cyclic);
 
   Offset _point(Offset p, Size size) => Offset(
     8 + p.dx * (size.width - 16),
@@ -459,8 +463,18 @@ class _EaseGraphPainter extends CustomPainter {
     final guide = Paint()..color = Colors.white38..strokeWidth = 1;
     canvas.drawLine(a, b, guide);
     canvas.drawLine(d, c, guide);
+    final curve = Path()..moveTo(a.dx, a.dy);
+    if (cyclic) {
+      for (int i = 1; i <= 120; i++) {
+        final x = i / 120;
+        final y = (x + .18 * math.sin(x * math.pi * 6)).clamp(0.0, 1.0);
+        curve.lineTo(8 + x * (size.width - 16), size.height - 8 - y * (size.height - 16));
+      }
+    } else {
+      curve.cubicTo(b.dx, b.dy, c.dx, c.dy, d.dx, d.dy);
+    }
     canvas.drawPath(
-      Path()..moveTo(a.dx, a.dy)..cubicTo(b.dx, b.dy, c.dx, c.dy, d.dx, d.dy),
+      curve,
       Paint()..color = editShiftAccent.value..strokeWidth = 3
         ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round,
     );
@@ -473,14 +487,16 @@ class _EaseGraphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_EaseGraphPainter old) =>
-      old.first != first || old.second != second;
+      old.first != first || old.second != second || old.cyclic != cyclic;
 }
 
 class _BezierCurveEditor extends StatefulWidget {
   final Offset first, second;
+  final bool cyclic;
   final void Function(Offset, Offset) onChanged;
   const _BezierCurveEditor({
     required this.first, required this.second, required this.onChanged,
+    this.cyclic = false,
   });
   @override
   State<_BezierCurveEditor> createState() => _BezierCurveEditorState();
@@ -520,7 +536,7 @@ class _BezierCurveEditorState extends State<_BezierCurveEditor> {
           border: Border.all(color: Colors.white12),
         ),
         child: CustomPaint(
-          painter: _EaseGraphPainter(widget.first, widget.second),
+          painter: _EaseGraphPainter(widget.first, widget.second, widget.cyclic),
           child: const SizedBox.expand(),
         ),
       ),
@@ -712,6 +728,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     }).toList(),
     'curveHandle1': [layer.curveHandle1.dx, layer.curveHandle1.dy],
     'curveHandle2': [layer.curveHandle2.dx, layer.curveHandle2.dy],
+    'curveCyclic': layer.curveCyclic,
   };
 
   Layer _decodeLayer(Map<String, dynamic> data) {
@@ -753,7 +770,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       ..hidden = data['hidden'] as bool? ?? false
       ..parentIndex = (data['parentIndex'] as num?)?.toInt()
       ..curveHandle1 = Offset((h1[0] as num).toDouble(), (h1[1] as num).toDouble())
-      ..curveHandle2 = Offset((h2[0] as num).toDouble(), (h2[1] as num).toDouble());
+      ..curveHandle2 = Offset((h2[0] as num).toDouble(), (h2[1] as num).toDouble())
+      ..curveCyclic = data['curveCyclic'] as bool? ?? false;
     final mesh = data['mesh'] as List?;
     if (mesh != null) {
       layer.mesh = mesh.map((point) => Offset(
@@ -2616,7 +2634,22 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       : null,
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Icon(fxLibrary[i].$2, size: 19, color: current == i ? Colors.white : const Color(0xFFB8C0C7)),
+                  Container(
+                    width: 40,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(9),
+                      gradient: LinearGradient(
+                        colors: [
+                          current == i ? const Color(0xFF20E36F).withOpacity(.42) : const Color(0xFF425A79),
+                          const Color(0xFF151D2B),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Icon(fxLibrary[i].$2, size: 21, color: current == i ? Colors.white : const Color(0xFFD8E8F5)),
+                  ),
                   Text(fxLibrary[i].$1, maxLines: 2, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
                 ]),
@@ -2868,6 +2901,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           _BezierCurveEditor(
             first: l.curveHandle1,
             second: l.curveHandle2,
+            cyclic: l.curveCyclic,
             onChanged: (first, second) => _ed(l, () {
               l.curveHandle1 = first;
               l.curveHandle2 = second;
@@ -2881,6 +2915,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             _curvePreset('Ease out', const Offset(0, 0), const Offset(.58, 1), l),
             _curvePreset('Back', const Offset(.34, -.18), const Offset(.72, 1.18), l),
             _curvePreset('Bounce', const Offset(.2, 1.2), const Offset(.8, .8), l),
+          ActionChip(label: const Text('Cyclic'), avatar: const Icon(Icons.waves_rounded, size: 14), onPressed: () => _ed(l, () => l.curveCyclic = true)),
           ]),
           Wrap(spacing: 6, children: [
             for (final keyframe in l.kfs)
@@ -3122,6 +3157,21 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 22),
             children: [
+              if (_multiSelectMode)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF202735),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF20E36F).withOpacity(.45)),
+                  ),
+                  child: Row(children: [
+                    Expanded(child: Text('${_multiSelection.length} layers selected', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
+                    TextButton(onPressed: _clearMultiSelect, child: const Text('Cancel')),
+                    FilledButton(onPressed: _groupSelectedLayers, child: const Text('Group')),
+                  ]),
+                ),
               if (layer != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
