@@ -768,7 +768,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     'pivot': [layer.pivot.dx, layer.pivot.dy], 'fx': layer.fx,
     'color': layer.color.value, 'bold': layer.bold, 'italic': layer.italic,
     'flipX': layer.flipX, 'flipY': layer.flipY, 'shadow': layer.shadow,
-    'hidden': layer.hidden, 'parentIndex': layer.parentIndex,
+    'hidden': layer.hidden, 'parentIndex': layer.parentIndex, 'groupId': layer.groupId,
     'mesh': layer.mesh.map((p) => [p.dx, p.dy]).toList(),
     'keyframes': layer.kfs.map((k) => {
       't': k.t, 'pos': [k.pos.dx, k.pos.dy], 'scale': k.scale,
@@ -817,6 +817,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       ..shadow = data['shadow'] as bool? ?? false
       ..hidden = data['hidden'] as bool? ?? false
       ..parentIndex = (data['parentIndex'] as num?)?.toInt()
+      ..groupId = (data['groupId'] as num?)?.toInt()
       ..curveHandle1 = Offset((h1[0] as num).toDouble(), (h1[1] as num).toDouble())
       ..curveHandle2 = Offset((h2[0] as num).toDouble(), (h2[1] as num).toDouble())
       ..curveCyclic = data['curveCyclic'] as bool? ?? false;
