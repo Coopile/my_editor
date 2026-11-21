@@ -104,6 +104,7 @@ const fxLibrary = [
   ('Chromatic', Icons.auto_awesome),
   ('Bend', Icons.auto_awesome),
   ('Shake', Icons.vibration),
+  ('Scale Assist', Icons.zoom_in),
   ('Zoom Pulse', Icons.zoom_in),
   ('Spin', Icons.rotate_right),
   ('Glitch', Icons.broken_image),
@@ -144,6 +145,11 @@ Widget applyFx(
           angle: math.sin(time * 23 * speed) * .018 * amount,
           child: w,
         ),
+      );
+    case 'Scale Assist':
+      return Transform.scale(
+        scale: 1 + math.sin(time * 2.4 * speed) * .028 * amount,
+        child: w,
       );
     case 'Zoom Pulse':
       return Transform.scale(
@@ -335,6 +341,7 @@ class Layer {
   double curveEase = .65;
   Offset curveHandle1 = const Offset(.42, 0);
   Offset curveHandle2 = const Offset(.58, 1);
+  bool curveCyclic = false;
 
   Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false;
   Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false, text = 'Mesh';
@@ -370,6 +377,7 @@ class Layer {
       ..curveEase = curveEase
       ..curveHandle1 = curveHandle1
       ..curveHandle2 = curveHandle2
+      ..curveCyclic = curveCyclic
       ..parentIndex = parentIndex
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList();
@@ -402,7 +410,9 @@ class Layer {
       }
     }
     var f = a.t == b.t ? 0.0 : (ms - a.t) / (b.t - a.t);
-    f = _bezierProgress(f, curveHandle1, curveHandle2);
+    f = curveCyclic
+        ? (f + .18 * math.sin(f * math.pi * 6)).clamp(0.0, 1.0).toDouble()
+        : _bezierProgress(f, curveHandle1, curveHandle2);
     pos = Offset.lerp(a.pos, b.pos, f)!;
     scale = ui.lerpDouble(a.scale, b.scale, f)!;
     rot = ui.lerpDouble(a.rot, b.rot, f)!;
@@ -432,7 +442,8 @@ double _bezierProgress(double x, Offset first, Offset second) {
 
 class _EaseGraphPainter extends CustomPainter {
   final Offset first, second;
-  _EaseGraphPainter(this.first, this.second);
+  final bool cyclic;
+  _EaseGraphPainter(this.first, this.second, this.cyclic);
 
   Offset _point(Offset p, Size size) => Offset(
     8 + p.dx * (size.width - 16),
@@ -453,8 +464,18 @@ class _EaseGraphPainter extends CustomPainter {
     final guide = Paint()..color = Colors.white38..strokeWidth = 1;
     canvas.drawLine(a, b, guide);
     canvas.drawLine(d, c, guide);
+    final curve = Path()..moveTo(a.dx, a.dy);
+    if (cyclic) {
+      for (int i = 1; i <= 120; i++) {
+        final x = i / 120;
+        final y = (x + .18 * math.sin(x * math.pi * 6)).clamp(0.0, 1.0);
+        curve.lineTo(8 + x * (size.width - 16), size.height - 8 - y * (size.height - 16));
+      }
+    } else {
+      curve.cubicTo(b.dx, b.dy, c.dx, c.dy, d.dx, d.dy);
+    }
     canvas.drawPath(
-      Path()..moveTo(a.dx, a.dy)..cubicTo(b.dx, b.dy, c.dx, c.dy, d.dx, d.dy),
+      curve,
       Paint()..color = editShiftAccent.value..strokeWidth = 3
         ..style = PaintingStyle.stroke..strokeCap = StrokeCap.round,
     );
@@ -467,14 +488,16 @@ class _EaseGraphPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_EaseGraphPainter old) =>
-      old.first != first || old.second != second;
+      old.first != first || old.second != second || old.cyclic != cyclic;
 }
 
 class _BezierCurveEditor extends StatefulWidget {
   final Offset first, second;
+  final bool cyclic;
   final void Function(Offset, Offset) onChanged;
   const _BezierCurveEditor({
     required this.first, required this.second, required this.onChanged,
+    this.cyclic = false,
   });
   @override
   State<_BezierCurveEditor> createState() => _BezierCurveEditorState();
@@ -514,7 +537,7 @@ class _BezierCurveEditorState extends State<_BezierCurveEditor> {
           border: Border.all(color: Colors.white12),
         ),
         child: CustomPaint(
-          painter: _EaseGraphPainter(widget.first, widget.second),
+          painter: _EaseGraphPainter(widget.first, widget.second, widget.cyclic),
           child: const SizedBox.expand(),
         ),
       ),
@@ -622,6 +645,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   final List<AudioTrack> _audioTracks = [];
   final List<List<Layer>> _undoStack = [];
   final List<List<Layer>> _redoStack = [];
+  final Set<int> _multiSelection = <int>{};
+  bool _multiSelectMode = false;
   int? _sel;
   int _videoFx = 0, _tab = 0;
   String _fxCategory = 'All', _fxSearch = '';
@@ -704,6 +729,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     }).toList(),
     'curveHandle1': [layer.curveHandle1.dx, layer.curveHandle1.dy],
     'curveHandle2': [layer.curveHandle2.dx, layer.curveHandle2.dy],
+    'curveCyclic': layer.curveCyclic,
   };
 
   Layer _decodeLayer(Map<String, dynamic> data) {
@@ -745,7 +771,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       ..hidden = data['hidden'] as bool? ?? false
       ..parentIndex = (data['parentIndex'] as num?)?.toInt()
       ..curveHandle1 = Offset((h1[0] as num).toDouble(), (h1[1] as num).toDouble())
-      ..curveHandle2 = Offset((h2[0] as num).toDouble(), (h2[1] as num).toDouble());
+      ..curveHandle2 = Offset((h2[0] as num).toDouble(), (h2[1] as num).toDouble())
+      ..curveCyclic = data['curveCyclic'] as bool? ?? false;
     final mesh = data['mesh'] as List?;
     if (mesh != null) {
       layer.mesh = mesh.map((point) => Offset(
@@ -1273,8 +1300,96 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     return false;
   }
 
+  void _openEditorTab(String tab) {
+    final index = tabs.indexWhere((item) => item.$1 == tab);
+    if (index < 0) return;
+    setState(() => _tab = index);
+    _openInspectorSheet();
+  }
+
   void _addCamera() => _add(Layer.camera(const Offset(120, 85)));
   void _addNull() => _add(Layer.nullObject(const Offset(90, 90)));
+
+  void _toggleMultiSelect(int index) {
+    if (index < 0 || index >= _layers.length) return;
+    setState(() {
+      _multiSelectMode = true;
+      if (!_multiSelection.add(index)) _multiSelection.remove(index);
+      _sel = index;
+      if (_multiSelection.isEmpty) _multiSelectMode = false;
+    });
+  }
+
+  void _clearMultiSelect() {
+    setState(() {
+      _multiSelection.clear();
+      _multiSelectMode = false;
+    });
+  }
+
+  Future<void> _parentSelectedLayer() async {
+    final child = _sel;
+    if (child == null || child < 0 || child >= _layers.length) return;
+    final parent = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: const Color(0xFF151719),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ListTile(title: Text('Parent layer', style: TextStyle(fontWeight: FontWeight.w800))),
+          ListTile(
+            leading: const Icon(Icons.link_off_rounded),
+            title: const Text('No parent'),
+            onTap: () => Navigator.pop(sheetContext, -1),
+          ),
+          for (int i = 0; i < _layers.length; i++)
+            if (i != child && _layers[i].isController && !_wouldCreateParentCycle(child, i))
+              ListTile(
+                leading: Icon(_layers[i].isCamera ? Icons.videocam_rounded : Icons.control_camera_rounded),
+                title: Text(_layers[i].text),
+                onTap: () => Navigator.pop(sheetContext, i),
+              ),
+          if (!_layers.any((layer) => layer.isController))
+            ListTile(
+              leading: const Icon(Icons.add_circle_outline_rounded),
+              title: const Text('Create Null parent'),
+              onTap: () => Navigator.pop(sheetContext, -2),
+            ),
+        ]),
+      ),
+    );
+    if (parent == null) return;
+    if (parent == -2) {
+      final controllerIndex = _layers.length;
+      _add(Layer.nullObject(const Offset(90, 90))..text = 'Parent Null');
+      if (child < _layers.length) {
+        _ed(_layers[child], () => _layers[child].parentIndex = controllerIndex);
+      }
+      return;
+    }
+    _ed(_layers[child], () => _layers[child].parentIndex = parent < 0 ? null : parent);
+  }
+
+  void _groupSelectedLayers() {
+    final selected = _multiSelection.where((i) => i >= 0 && i < _layers.length).toList()..sort();
+    if (selected.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Long-press layer rows to select at least two layers to group.')),
+      );
+      return;
+    }
+    _pushUndo();
+    final group = Layer.nullObject(const Offset(90, 90))..text = 'Group ${_layers.length + 1}';
+    setState(() {
+      final groupIndex = _layers.length;
+      _layers.add(group);
+      for (final index in selected) {
+        _layers[index].parentIndex = groupIndex;
+      }
+      _sel = groupIndex;
+      _multiSelection.clear();
+      _multiSelectMode = false;
+    });
+  }
 
   void _addKeyframeNow() {
     if (_sel == null || _sel! >= _layers.length) return;
@@ -1359,6 +1474,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Shake':
         final drift = (.025 * amount).toStringAsFixed(4);
         return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
+      case 'Scale Assist':
+        return "scale=w='iw*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame,crop=iw/1.06:ih/1.06";
       case 'Zoom Pulse':
         return 'scale=iw*1.08:ih*1.08,crop=iw/1.08:ih/1.08';
       case 'Spin':
@@ -1427,6 +1544,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Shake':
       case 'Spin':
         return null;
+      case 'Scale Assist':
+        return "scale=w='iw*(1+" + (0.028 * strength).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+" + (0.028 * strength).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame";
       case 'Zoom Pulse':
         return 'scale=iw*1.08:ih*1.08';
       case 'Glitch':
@@ -1993,6 +2112,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     bool visible = true,
     VoidCallback? onVisibilityToggle,
     VoidCallback? onTap,
+    VoidCallback? onLongPress,
     VoidCallback? onMore,
     List<int> keyframeTimes = const [],
     ValueChanged<int>? onKeyframeTap,
@@ -2027,6 +2147,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             return GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: onTap,
+              onLongPress: onLongPress,
               onHorizontalDragUpdate: (d) {
                 final target = ((d.localPosition.dx / width).clamp(0.0, 1.0) * safeMax);
                 final span = high - low;
@@ -2321,7 +2442,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                                       : const Color(0xFF278B58),
                   values: RangeValues(_layers[i].start, _layers[i].end),
                   max: 1,
-                  selected: selected == i,
+                  selected: selected == i || _multiSelection.contains(i),
                   visible: !_layers[i].hidden,
                   onVisibilityToggle: () => setState(() => _layers[i].hidden = !_layers[i].hidden),
                   keyframeTimes: _layers[i].kfs.map((keyframe) => keyframe.t).toList(),
@@ -2330,7 +2451,18 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     setState(() => _sel = i);
                   },
                   onKeyframeMove: (oldTime, newTime) => _moveLayerKeyframe(i, oldTime, newTime),
-                  onTap: () => setState(() => _sel = i),
+                  onTap: () {
+                    if (_multiSelectMode) {
+                      _toggleMultiSelect(i);
+                    } else {
+                      setState(() => _sel = i);
+                      if (MediaQuery.of(context).size.width < 760) {
+                        _tab = tabs.indexWhere((tab) => tab.$1 == 'Transform');
+                        _openInspectorSheet();
+                      }
+                    }
+                  },
+                  onLongPress: () => _toggleMultiSelect(i),
                   onMore: () => _showLayerActions(i),
                   onChanged: (range) => _ed(_layers[i], () {
                     _layers[i].start = range.start;
@@ -2413,6 +2545,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         onPressed: () => _ed(layer, () {
           layer.curveHandle1 = first;
           layer.curveHandle2 = second;
+          layer.curveCyclic = false;
         }),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
@@ -2507,7 +2640,22 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       : null,
                 ),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-                  Icon(fxLibrary[i].$2, size: 19, color: current == i ? Colors.white : const Color(0xFFB8C0C7)),
+                  Container(
+                    width: 40,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(9),
+                      gradient: LinearGradient(
+                        colors: [
+                          current == i ? const Color(0xFF20E36F).withOpacity(.42) : const Color(0xFF425A79),
+                          const Color(0xFF151D2B),
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Icon(fxLibrary[i].$2, size: 21, color: current == i ? Colors.white : const Color(0xFFD8E8F5)),
+                  ),
                   Text(fxLibrary[i].$1, maxLines: 2, overflow: TextOverflow.ellipsis,
                       style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
                 ]),
@@ -2636,10 +2784,46 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     switch (name) {
       case 'Transform':
         return [
+          Row(children: [
+            Expanded(child: TextFormField(
+              key: ValueKey('transform-x-${l.pos.dx.toStringAsFixed(2)}'),
+              initialValue: l.pos.dx.toStringAsFixed(1),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'X', isDense: true, border: OutlineInputBorder()),
+              onFieldSubmitted: (value) {
+                final parsed = double.tryParse(value);
+                if (parsed != null) _ed(l, () => l.pos = Offset(parsed, l.pos.dy));
+              },
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: TextFormField(
+              key: ValueKey('transform-y-${l.pos.dy.toStringAsFixed(2)}'),
+              initialValue: l.pos.dy.toStringAsFixed(1),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'Y', isDense: true, border: OutlineInputBorder()),
+              onFieldSubmitted: (value) {
+                final parsed = double.tryParse(value);
+                if (parsed != null) _ed(l, () => l.pos = Offset(l.pos.dx, parsed));
+              },
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: TextFormField(
+              key: ValueKey('transform-z-${l.rot.toStringAsFixed(3)}'),
+              initialValue: (l.rot * 180 / math.pi).toStringAsFixed(1),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'Z°', isDense: true, border: OutlineInputBorder()),
+              onFieldSubmitted: (value) {
+                final parsed = double.tryParse(value);
+                if (parsed != null) _ed(l, () => l.rot = parsed * math.pi / 180);
+              },
+            )),
+          ]),
+          const SizedBox(height: 12),
           _s(l, 'Position X', l.pos.dx, 0, 600, (v) => l.pos = Offset(v, l.pos.dy)),
           _s(l, 'Position Y', l.pos.dy, 0, 400, (v) => l.pos = Offset(l.pos.dx, v)),
-          _s(l, 'Size', l.scale, .3, 3, (v) => l.scale = v),
-          _s(l, 'Rotate', l.rot, -math.pi, math.pi, (v) => l.rot = v),
+          _s(l, 'Scale', l.scale, .1, 4, (v) => l.scale = v),
+          _s(l, 'Rotate', l.rot * 180 / math.pi, -180, 180, (v) => l.rot = v * math.pi / 180),
+          _s(l, 'Skew', l.bend, -.8, .8, (v) => l.bend = v),
           _s(l, 'Pivot X', l.pivot.dx, 0, 1, (v) => l.pivot = Offset(v, l.pivot.dy)),
           _s(l, 'Pivot Y', l.pivot.dy, 0, 1, (v) => l.pivot = Offset(l.pivot.dx, v)),
           if (l.isCamera) ...[
@@ -2647,7 +2831,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             _s(l, 'Camera zoom', l.scale, .2, 4, (v) => l.scale = v),
             _s(l, 'Camera rotation', l.rot, -math.pi, math.pi, (v) => l.rot = v),
           ],
-          if (l.isController) _note('Parent other layers to this controller from their Transform tab.'),
+          if (l.isController) _note('Parent other layers to this controller with the Parent button.'),
           if (!l.isController && _layers.any((candidate) => candidate.isController))
             DropdownButtonFormField<int?>(
               value: l.parentIndex,
@@ -2758,6 +2942,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           _BezierCurveEditor(
             first: l.curveHandle1,
             second: l.curveHandle2,
+            cyclic: l.curveCyclic,
             onChanged: (first, second) => _ed(l, () {
               l.curveHandle1 = first;
               l.curveHandle2 = second;
@@ -2771,6 +2956,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             _curvePreset('Ease out', const Offset(0, 0), const Offset(.58, 1), l),
             _curvePreset('Back', const Offset(.34, -.18), const Offset(.72, 1.18), l),
             _curvePreset('Bounce', const Offset(.2, 1.2), const Offset(.8, .8), l),
+          ActionChip(label: const Text('Cyclic'), avatar: const Icon(Icons.waves_rounded, size: 14), onPressed: () => _ed(l, () => l.curveCyclic = true)),
           ]),
           Wrap(spacing: 6, children: [
             for (final keyframe in l.kfs)
@@ -2985,7 +3171,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     if (_fxSearch.isNotEmpty && !name.contains(_fxSearch)) return false;
     if (_fxCategory == 'All') return true;
     final terms = switch (_fxCategory) {
-      'Motion' => ['shake', 'zoom pulse', 'spin', 'swing', 'wobble', 'drift', 'twitch'],
+      'Motion' => ['shake', 'scale assist', 'zoom pulse', 'spin', 'swing', 'wobble', 'drift', 'twitch'],
       'Distortion' => ['bend', 'glitch', 'rgb split', 'pixelate', 'chromatic'],
       'Generators' => ['film grain', 'flash', 'glow'],
       'Contour' => ['vignette', 'shadow', 'sketch', 'comic'],
@@ -3012,6 +3198,21 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 14, 14, 22),
             children: [
+              if (_multiSelectMode)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF202735),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: const Color(0xFF20E36F).withOpacity(.45)),
+                  ),
+                  child: Row(children: [
+                    Expanded(child: Text('${_multiSelection.length} layers selected', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800))),
+                    TextButton(onPressed: _clearMultiSelect, child: const Text('Cancel')),
+                    FilledButton(onPressed: _groupSelectedLayers, child: const Text('Group')),
+                  ]),
+                ),
               if (layer != null)
                 Container(
                   margin: const EdgeInsets.only(bottom: 12),
@@ -3041,7 +3242,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }
 
 
-  Widget _tool(IconData icon, String label, VoidCallback onTap) => Expanded(
+  Widget _tool(IconData icon, String label, VoidCallback onTap) => SizedBox(
+    width: 70,
     child: InkWell(
       onTap: onTap,
       child: SizedBox(
@@ -3063,14 +3265,21 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       color: Color(0xFF070809),
       border: Border(top: BorderSide(color: Color(0xFF242629))),
     ),
-    child: Row(children: [
-      _tool(Icons.folder_open_rounded, 'Media', _openMediaMenu),
-      _tool(Icons.text_fields_rounded, 'Text', _addText),
-      _tool(Icons.texture_rounded, 'Solid', _addSolidLayer),
-      _tool(Icons.layers_rounded, 'Adjustment', _addAdjustmentLayer),
-      _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70)))),
-      _tool(Icons.category_rounded, 'Shape', _addShapeLayer),
-    ]),
+    child: SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        _tool(Icons.folder_open_rounded, 'Media', _openMediaMenu),
+        _tool(Icons.text_fields_rounded, 'Text', _addText),
+        _tool(Icons.texture_rounded, 'Solid', _addSolidLayer),
+        _tool(Icons.layers_rounded, 'Adjustment', _addAdjustmentLayer),
+        _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70)))),
+        _tool(Icons.category_rounded, 'Shape', _addShapeLayer),
+        _tool(Icons.open_with_rounded, 'Transform', () => _openEditorTab('Transform')),
+        _tool(Icons.auto_awesome_rounded, 'Effects', () => _openEditorTab('Effects')),
+        _tool(Icons.account_tree_rounded, 'Parent', _parentSelectedLayer),
+        _tool(Icons.group_work_rounded, 'Group', _groupSelectedLayers),
+      ]),
+    ),
   );
 
 
