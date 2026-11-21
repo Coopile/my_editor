@@ -1475,7 +1475,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         final drift = (.025 * amount).toStringAsFixed(4);
         return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
       case 'Scale Assist':
-        return "scale=w='iw*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame,crop=iw/1.06:ih/1.06";
+        return "scale=w='iw*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+" + (0.028 * amount).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame,crop=iw/1.06:ih/1.06";
       case 'Zoom Pulse':
         return 'scale=iw*1.08:ih*1.08,crop=iw/1.08:ih/1.08';
       case 'Spin':
@@ -1545,7 +1545,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Spin':
         return null;
       case 'Scale Assist':
-        return "scale=w='iw*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame";
+        return "scale=w='iw*(1+" + (0.028 * strength).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+" + (0.028 * strength).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame";
       case 'Zoom Pulse':
         return 'scale=iw*1.08:ih*1.08';
       case 'Glitch':
