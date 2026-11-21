@@ -104,6 +104,7 @@ const fxLibrary = [
   ('Chromatic', Icons.auto_awesome),
   ('Bend', Icons.auto_awesome),
   ('Shake', Icons.vibration),
+  ('Scale Assist', Icons.zoom_in),
   ('Zoom Pulse', Icons.zoom_in),
   ('Spin', Icons.rotate_right),
   ('Glitch', Icons.broken_image),
@@ -144,6 +145,11 @@ Widget applyFx(
           angle: math.sin(time * 23 * speed) * .018 * amount,
           child: w,
         ),
+      );
+    case 'Scale Assist':
+      return Transform.scale(
+        scale: 1 + math.sin(time * 2.4 * speed) * .028 * amount,
+        child: w,
       );
     case 'Zoom Pulse':
       return Transform.scale(
@@ -1276,6 +1282,78 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   void _addCamera() => _add(Layer.camera(const Offset(120, 85)));
   void _addNull() => _add(Layer.nullObject(const Offset(90, 90)));
 
+  void _toggleMultiSelect(int index) {
+    if (index < 0 || index >= _layers.length) return;
+    setState(() {
+      _multiSelectMode = true;
+      if (!_multiSelection.add(index)) _multiSelection.remove(index);
+      _sel = index;
+      if (_multiSelection.isEmpty) _multiSelectMode = false;
+    });
+  }
+
+  void _clearMultiSelect() {
+    setState(() {
+      _multiSelection.clear();
+      _multiSelectMode = false;
+    });
+  }
+
+  Future<void> _parentSelectedLayer() async {
+    final child = _sel;
+    if (child == null || child < 0 || child >= _layers.length) return;
+    final parent = await showModalBottomSheet<int?>(
+      context: context,
+      backgroundColor: const Color(0xFF151719),
+      builder: (sheetContext) => SafeArea(
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const ListTile(title: Text('Parent layer', style: TextStyle(fontWeight: FontWeight.w800))),
+          ListTile(
+            leading: const Icon(Icons.link_off_rounded),
+            title: const Text('No parent'),
+            onTap: () => Navigator.pop(sheetContext, -1),
+          ),
+          for (int i = 0; i < _layers.length; i++)
+            if (i != child && _layers[i].isController && !_wouldCreateParentCycle(child, i))
+              ListTile(
+                leading: Icon(_layers[i].isCamera ? Icons.videocam_rounded : Icons.control_camera_rounded),
+                title: Text(_layers[i].text),
+                onTap: () => Navigator.pop(sheetContext, i),
+              ),
+          if (!_layers.any((layer) => layer.isController))
+            const Padding(
+              padding: EdgeInsets.all(16),
+              child: Text('Add a Null or Camera layer first to use parenting.'),
+            ),
+        ]),
+      ),
+    );
+    if (parent == null) return;
+    _ed(_layers[child], () => _layers[child].parentIndex = parent < 0 ? null : parent);
+  }
+
+  void _groupSelectedLayers() {
+    final selected = _multiSelection.where((i) => i >= 0 && i < _layers.length).toList()..sort();
+    if (selected.length < 2) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Long-press layer rows to select at least two layers to group.')),
+      );
+      return;
+    }
+    _pushUndo();
+    final group = Layer.nullObject(const Offset(90, 90))..text = 'Group ${_layers.length + 1}';
+    setState(() {
+      final groupIndex = _layers.length;
+      _layers.add(group);
+      for (final index in selected) {
+        _layers[index].parentIndex = groupIndex;
+      }
+      _sel = groupIndex;
+      _multiSelection.clear();
+      _multiSelectMode = false;
+    });
+  }
+
   void _addKeyframeNow() {
     if (_sel == null || _sel! >= _layers.length) return;
     _ed(_layers[_sel!], () => _layers[_sel!].upsert(_ms));
@@ -1993,6 +2071,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     bool visible = true,
     VoidCallback? onVisibilityToggle,
     VoidCallback? onTap,
+    VoidCallback? onLongPress,
     VoidCallback? onMore,
     List<int> keyframeTimes = const [],
     ValueChanged<int>? onKeyframeTap,
@@ -2321,7 +2400,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                                       : const Color(0xFF278B58),
                   values: RangeValues(_layers[i].start, _layers[i].end),
                   max: 1,
-                  selected: selected == i,
+                  selected: selected == i || _multiSelection.contains(i),
                   visible: !_layers[i].hidden,
                   onVisibilityToggle: () => setState(() => _layers[i].hidden = !_layers[i].hidden),
                   keyframeTimes: _layers[i].kfs.map((keyframe) => keyframe.t).toList(),
@@ -2330,7 +2409,18 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     setState(() => _sel = i);
                   },
                   onKeyframeMove: (oldTime, newTime) => _moveLayerKeyframe(i, oldTime, newTime),
-                  onTap: () => setState(() => _sel = i),
+                  onTap: () {
+                    if (_multiSelectMode) {
+                      _toggleMultiSelect(i);
+                    } else {
+                      setState(() => _sel = i);
+                      if (MediaQuery.of(context).size.width < 760) {
+                        _tab = tabs.indexWhere((tab) => tab.$1 == 'Transform');
+                        _openInspectorSheet();
+                      }
+                    }
+                  },
+                  onLongPress: () => _toggleMultiSelect(i),
                   onMore: () => _showLayerActions(i),
                   onChanged: (range) => _ed(_layers[i], () {
                     _layers[i].start = range.start;
@@ -2985,7 +3075,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     if (_fxSearch.isNotEmpty && !name.contains(_fxSearch)) return false;
     if (_fxCategory == 'All') return true;
     final terms = switch (_fxCategory) {
-      'Motion' => ['shake', 'zoom pulse', 'spin', 'swing', 'wobble', 'drift', 'twitch'],
+      'Motion' => ['shake', 'scale assist', 'zoom pulse', 'spin', 'swing', 'wobble', 'drift', 'twitch'],
       'Distortion' => ['bend', 'glitch', 'rgb split', 'pixelate', 'chromatic'],
       'Generators' => ['film grain', 'flash', 'glow'],
       'Contour' => ['vignette', 'shadow', 'sketch', 'comic'],
