@@ -1474,6 +1474,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Shake':
         final drift = (.025 * amount).toStringAsFixed(4);
         return "crop=iw*0.92:ih*0.92:x='(iw-ow)/2+sin(t*${32 * speed})*iw*$drift':y='(ih-oh)/2+cos(t*${27 * speed})*ih*$drift',scale=trunc(iw/0.92/2)*2:trunc(ih/0.92/2)*2";
+      case 'Scale Assist':
+        return "scale=w='iw*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame,crop=iw/1.06:ih/1.06";
       case 'Zoom Pulse':
         return 'scale=iw*1.08:ih*1.08,crop=iw/1.08:ih/1.08';
       case 'Spin':
@@ -1542,6 +1544,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Shake':
       case 'Spin':
         return null;
+      case 'Scale Assist':
+        return "scale=w='iw*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+0.028*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame";
       case 'Zoom Pulse':
         return 'scale=iw*1.08:ih*1.08';
       case 'Glitch':
@@ -2780,6 +2784,41 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     switch (name) {
       case 'Transform':
         return [
+          Row(children: [
+            Expanded(child: TextFormField(
+              key: ValueKey('transform-x-${l.pos.dx.toStringAsFixed(2)}'),
+              initialValue: l.pos.dx.toStringAsFixed(1),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'X', isDense: true, border: OutlineInputBorder()),
+              onFieldSubmitted: (value) {
+                final parsed = double.tryParse(value);
+                if (parsed != null) _ed(l, () => l.pos = Offset(parsed, l.pos.dy));
+              },
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: TextFormField(
+              key: ValueKey('transform-y-${l.pos.dy.toStringAsFixed(2)}'),
+              initialValue: l.pos.dy.toStringAsFixed(1),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'Y', isDense: true, border: OutlineInputBorder()),
+              onFieldSubmitted: (value) {
+                final parsed = double.tryParse(value);
+                if (parsed != null) _ed(l, () => l.pos = Offset(l.pos.dx, parsed));
+              },
+            )),
+            const SizedBox(width: 8),
+            Expanded(child: TextFormField(
+              key: ValueKey('transform-z-${l.rot.toStringAsFixed(3)}'),
+              initialValue: (l.rot * 180 / math.pi).toStringAsFixed(1),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true, signed: true),
+              decoration: const InputDecoration(labelText: 'Z°', isDense: true, border: OutlineInputBorder()),
+              onFieldSubmitted: (value) {
+                final parsed = double.tryParse(value);
+                if (parsed != null) _ed(l, () => l.rot = parsed * math.pi / 180);
+              },
+            )),
+          ]),
+          const SizedBox(height: 12),
           _s(l, 'Position X', l.pos.dx, 0, 600, (v) => l.pos = Offset(v, l.pos.dy)),
           _s(l, 'Position Y', l.pos.dy, 0, 400, (v) => l.pos = Offset(l.pos.dx, v)),
           _s(l, 'Scale', l.scale, .1, 4, (v) => l.scale = v),
