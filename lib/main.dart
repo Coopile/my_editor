@@ -725,6 +725,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   Timer? _autosaveTimer;
   bool _restoringProject = false;
   StateSetter? _inspectorSheetSetState;
+  String _projectAspect = '16:9';
+  int _projectWidth = 1920, _projectHeight = 1080, _projectFps = 30;
+  Color _projectBackground = Colors.black;
 
   @override
   void initState() {
@@ -861,6 +864,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       final prefs = await SharedPreferences.getInstance();
       final data = <String, dynamic>{
         'version': 1,
+        'projectAspect': _projectAspect, 'projectWidth': _projectWidth,
+        'projectHeight': _projectHeight, 'projectFps': _projectFps,
+        'projectBackground': _projectBackground.value,
         'videoPath': _videoPath,
         'trimStart': _trimStart, 'trimEnd': _trimEnd,
         'videoFx': _videoFx, 'videoFxStrength': _videoFxStrength,
@@ -895,6 +901,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       _bookmarks
         ..clear()
         ..addAll((data['bookmarks'] as List? ?? []).map((v) => (v as num).toInt()));
+      _projectAspect = (data['projectAspect'] ?? '16:9').toString();
+      _projectWidth = (data['projectWidth'] as num? ?? 1920).toInt();
+      _projectHeight = (data['projectHeight'] as num? ?? 1080).toInt();
+      _projectFps = (data['projectFps'] as num? ?? 30).toInt();
+      _projectBackground = Color((data['projectBackground'] as num? ?? Colors.black.value).toInt());
       _videoFx = (data['videoFx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1).toInt();
       _videoFxStrength = (data['videoFxStrength'] as num? ?? 1).toDouble();
       _videoFxSpeed = (data['videoFxSpeed'] as num? ?? 1).toDouble();
@@ -2125,7 +2136,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       return GestureDetector(
         onTap: () => setState(() => _sel = null),
         child: Container(
-          color: const Color(0xFF000000),
+          color: _projectBackground,
           child: ClipRect(
             child: Transform.scale(scale: _previewZoom, child: Stack(fit: StackFit.expand, children: [
               if (vc != null && !_videoHidden)
@@ -3213,6 +3224,48 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     });
   }
 
+  Future<void> _openProjectSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      backgroundColor: const Color(0xFF111214),
+      builder: (sheetContext) => StatefulBuilder(builder: (context, sheetSetState) {
+        void update(VoidCallback action) {
+          setState(action);
+          sheetSetState(() {});
+          _saveProject();
+        }
+        final ratios = <String, List<int>>{
+          '16:9': [1920, 1080], '9:16': [1080, 1920], '1:1': [1080, 1080],
+          '4:5': [1080, 1350], '4:3': [1440, 1080], 'Custom': [_projectWidth, _projectHeight],
+        };
+        return Padding(
+          padding: EdgeInsets.fromLTRB(18, 18, 18, MediaQuery.of(sheetContext).viewInsets.bottom + 22),
+          child: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [const Expanded(child: Text('PROJECT SETTINGS', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.2))), IconButton(onPressed: () => Navigator.pop(sheetContext), icon: const Icon(Icons.close))]),
+            const SizedBox(height: 12),
+            const Text('ASPECT RATIO', style: TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 7, runSpacing: 7, children: [for (final ratio in ratios.keys) ChoiceChip(label: Text(ratio), selected: _projectAspect == ratio, onSelected: (_) => update(() { _projectAspect = ratio; if (ratio != 'Custom') { _projectWidth = ratios[ratio]![0]; _projectHeight = ratios[ratio]![1]; } }))]),
+            const SizedBox(height: 14),
+            Row(children: [Expanded(child: TextFormField(initialValue: '$_projectWidth', keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Width', border: OutlineInputBorder()), onFieldSubmitted: (v) { final n = int.tryParse(v); if (n != null && n > 0) update(() { _projectWidth = n.clamp(16, 8192); _projectAspect = 'Custom'; }); })), const SizedBox(width: 10), Expanded(child: TextFormField(initialValue: '$_projectHeight', keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Height', border: OutlineInputBorder()), onFieldSubmitted: (v) { final n = int.tryParse(v); if (n != null && n > 0) update(() { _projectHeight = n.clamp(16, 8192); _projectAspect = 'Custom'; }); }))]),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<int>(value: _projectFps, decoration: const InputDecoration(labelText: 'Frame rate', border: OutlineInputBorder()), items: [24, 25, 30, Д, 50, 60].whereType<int>().map((fps) => DropdownMenuItem(value: fps, child: Text('$fps FPS'))).toList(), onChanged: (v) { if (v != null) update(() => _projectFps = v); }),
+            const SizedBox(height: 14),
+            const Text('BACKGROUND', style: TextStyle(color: Colors.white60, fontSize: 10, fontWeight: FontWeight.w800)),
+            const SizedBox(height: 8),
+            Wrap(spacing: 10, children: [for (final color in [Colors.black, const Color(0xFF202020), Colors.white, const Color(0xFF101B32), const Color(0xFF263238)]) GestureDetector(onTap: () => update(() => _projectBackground = color), child: Container(width: 34, height: 34, decoration: BoxDecoration(color: color, shape: BoxShape.circle, border: Border.all(color: _projectBackground == color ? const Color(0xFF20E36F) : Colors.white30, width: _projectBackground == color ? 3 : 1))))]),
+            const SizedBox(height: 12),
+            Text('Canvas: $_projectWidth × $_projectHeight · $_projectFps FPS', style: const TextStyle(color: Colors.white54, fontSize: 11)),
+            const SizedBox(height: 8),
+            const Text('These settings are saved with the project. Existing source-video exports still use the source clip dimensions until the export pipeline is updated.', style: TextStyle(color: Colors.white38, fontSize: 10)),
+          ])),
+        );
+      }),
+    );
+  }
+
   Future<void> _openInspectorSheet() async {
     if (!mounted) return;
     await showModalBottomSheet<void>(
@@ -3477,6 +3530,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: .1),
         ),
         actions: [
+          IconButton(tooltip: 'Project settings', onPressed: _openProjectSettings, icon: const Icon(Icons.settings_rounded, size: 20)),
           if (_pivotMode)
             const Center(child: Padding(
               padding: EdgeInsets.only(right: 8),
