@@ -29,10 +29,10 @@ class _RigBone {
   final Map<int,double> rotationKeys;
   final Map<int,String> easingKeys;
   final Map<int,double> overshootKeys;
-  final Map<int,Offset> curveHandle1Keys,curveHandle2Keys;
-  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys, Map<int,String>? easingKeys, Map<int,double>? overshootKeys, Map<int,Offset>? curveHandle1Keys, Map<int,Offset>? curveHandle2Keys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {}, easingKeys = easingKeys ?? {}, overshootKeys = overshootKeys ?? {}, curveHandle1Keys=curveHandle1Keys??{},curveHandle2Keys=curveHandle2Keys??{};
-  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v)),'easingKeys':easingKeys.map((k,v)=>MapEntry(k.toString(),v)),'overshootKeys':overshootKeys.map((k,v)=>MapEntry(k.toString(),v)),'curveHandle1Keys':curveHandle1Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'curveHandle2Keys':curveHandle2Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy]))};
-  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),easingKeys:(j['easingKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),v.toString())),overshootKeys:(j['overshootKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),curveHandle1Keys:(j['curveHandle1Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),curveHandle2Keys:(j['curveHandle2Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))));
+  final Map<int,Offset> curveHandle1Keys,curveHandle2Keys,aKeys,bKeys;
+  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys, Map<int,String>? easingKeys, Map<int,double>? overshootKeys, Map<int,Offset>? curveHandle1Keys, Map<int,Offset>? curveHandle2Keys, Map<int,Offset>? aKeys, Map<int,Offset>? bKeys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {}, easingKeys = easingKeys ?? {}, overshootKeys = overshootKeys ?? {}, curveHandle1Keys=curveHandle1Keys??{},curveHandle2Keys=curveHandle2Keys??{},aKeys=aKeys??{},bKeys=bKeys??{};
+  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v)),'aKeys':aKeys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'bKeys':bKeys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'easingKeys':easingKeys.map((k,v)=>MapEntry(k.toString(),v)),'overshootKeys':overshootKeys.map((k,v)=>MapEntry(k.toString(),v)),'curveHandle1Keys':curveHandle1Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'curveHandle2Keys':curveHandle2Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy]))};
+  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),aKeys:(j['aKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),bKeys:(j['bKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),easingKeys:(j['easingKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),v.toString())),overshootKeys:(j['overshootKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),curveHandle1Keys:(j['curveHandle1Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),curveHandle2Keys:(j['curveHandle2Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))));
 }
 
 class MangaCutEffectClip {
@@ -217,7 +217,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   }
   void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
   void _addEffect(String name){final e=MangaCutEffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
-  void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();e.strengthKeys[_time/_duration]=e.strength;}_changed();}
+  void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;b.aKeys[_time]=b.a;b.bKeys[_time]=b.b;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();e.strengthKeys[_time/_duration]=e.strength;}_changed();}
   double _easeProgress(_RigBone bone,int segmentStart,double t){
     final mode=bone.easingKeys[segmentStart]??'Linear';
     var value=t;
@@ -250,6 +250,17 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     }
     return _bezierCoordinate(first.dy,second.dy,t);
   }
+  Offset _offsetAt(Map<int,Offset> keys,Offset fallback,_RigBone bone,int time){
+    final frames=keys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
+    if(frames.isEmpty)return fallback;
+    if(time<=frames.first.key)return frames.first.value;
+    if(time>=frames.last.key)return frames.last.value;
+    for(var i=1;i<frames.length;i++){
+      if(time<=frames[i].key){final a=frames[i-1],b=frames[i];final t=(time-a.key)/(b.key-a.key);final eased=_easeProgress(bone,a.key,t);return Offset.lerp(a.value,b.value,eased)!;}
+    }
+    return fallback;
+  }
+  void _applyPoseAt(int time){for(final bone in _bones){bone.a=_offsetAt(bone.aKeys,bone.a,bone,time);bone.b=_offsetAt(bone.bKeys,bone.b,bone,time);bone.rotation=_rotationAt(bone,time);}}
   double _rotationAt(_RigBone bone,int time){
     final frames=bone.rotationKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
     if(frames.isEmpty)return bone.rotation;
@@ -294,7 +305,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Cancel')),FilledButton(onPressed:(){bone.easingKeys[segment]=mode;bone.overshootKeys[segment]=amount;bone.curveHandle1Keys[segment]=handle1;bone.curveHandle2Keys[segment]=handle2;_changed();Navigator.pop(dialogContext);},child:const Text('Apply curve'))],
     )));
   }
-  void _togglePlayback(){if(_playing){_playTimer?.cancel();_playTimer=null;setState(()=>_playing=false);_save();return;}if(_time>=_duration)_time=0;setState(()=>_playing=true);_playTimer=Timer.periodic(const Duration(milliseconds:16),(timer){if(!mounted){timer.cancel();return;}final next=_time+16;if(next>=_duration){_time=_duration;timer.cancel();_playTimer=null;_playing=false;}else{_time=next;}for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}setState((){});});}
+  void _togglePlayback(){if(_playing){_playTimer?.cancel();_playTimer=null;setState(()=>_playing=false);_save();return;}if(_time>=_duration)_time=0;setState(()=>_playing=true);_playTimer=Timer.periodic(const Duration(milliseconds:16),(timer){if(!mounted){timer.cancel();return;}final next=_time+16;if(next>=_duration){_time=_duration;timer.cancel();_playTimer=null;_playing=false;}else{_time=next;}_applyPoseAt(_time);setState((){});});}
   @override void dispose(){_playTimer?.cancel();_sourceImage?.dispose();super.dispose();}
   double _timelineTimeAt(double x,double width)=>((x/width).clamp(0.0,1.0)*_duration).toDouble();
   void _timelinePanStart(Offset p,Size size){
@@ -334,7 +345,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
           final width=(effect.end-effect.start);final start=((p.dx-_timelineDragOffset)/size.width).clamp(0.0,1.0-width).toDouble();
           effect.start=start;effect.end=start+width;
         }
-      }else if(_timelineDragKind=='scrub'){_time=t;for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}}
+      }else if(_timelineDragKind=='scrub'){_time=t;_applyPoseAt(_time);}
     });
     _save();
   }
