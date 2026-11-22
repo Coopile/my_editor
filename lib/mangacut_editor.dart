@@ -249,6 +249,33 @@ class _RigPainter extends CustomPainter {
     canvas.scale(scale,scale);
     canvas.translate(-center.dx,-center.dy);
   }
+  Offset _deformByBones(Offset point,Size size){
+    final radius=math.max(24.0,math.min(size.width,size.height)*.22);
+    for(var i=0;i<bones.length;i++){
+      final bone=bones[i];
+      if(bone.rotation.abs()<.0001)continue;
+      final localA=Offset(bone.a.dx*size.width,bone.a.dy*size.height);
+      final localB=Offset(bone.b.dx*size.width,bone.b.dy*size.height);
+      final rotatedB=localA+Offset(
+        (localB-localA).dx*math.cos(bone.rotation)-(localB-localA).dy*math.sin(bone.rotation),
+        (localB-localA).dx*math.sin(bone.rotation)+(localB-localA).dy*math.cos(bone.rotation),
+      );
+      final a=_applyParentTransforms(i,localA);
+      final b=_applyParentTransforms(i,rotatedB);
+      final segment=b-a;
+      final lengthSquared=segment.dx*segment.dx+segment.dy*segment.dy;
+      final projection=lengthSquared==0?0.0:(((point-a).dx*segment.dx+(point-a).dy*segment.dy)/lengthSquared).clamp(0.0,1.0);
+      final nearest=a+segment*projection;
+      final distance=(point-nearest).distance;
+      if(distance>=radius)continue;
+      final influence=1-distance/radius;
+      final weight=influence*influence*(3-2*influence);
+      final angle=bone.rotation*weight;
+      final delta=point-a;
+      point=a+Offset(delta.dx*math.cos(angle)-delta.dy*math.sin(angle),delta.dx*math.sin(angle)+delta.dy*math.cos(angle));
+    }
+    return point;
+  }
   void _drawImageMesh(Canvas canvas,Size size,ui.Image image){
     const cols=24, rows=24;
     final positions=<Offset>[], tex=<Offset>[], indices=<int>[];
@@ -276,7 +303,8 @@ class _RigPainter extends CustomPainter {
             }
           }
         }
-        positions.add(Offset(px,py));
+        final deformed=_deformByBones(Offset(px,py),size);
+        positions.add(deformed);
         tex.add(Offset(u*image.width.toDouble(),v*image.height.toDouble()));
       }
     }
