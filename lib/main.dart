@@ -613,13 +613,13 @@ double _curveProgress(double value, String preset, Offset first, Offset second, 
     case 'Ease In Out': return t<.5?2*t*t:1-math.pow(-2*t+2,2).toDouble()/2;
     case 'Elastic':
       if(t==0||t==1)return t;
-      return (math.pow(2,-10*t)*math.sin((t*10-.75)*(2*math.pi/3))+1).clamp(0.0,1.0).toDouble();
+      return (math.pow(2,-10*t)*math.sin((t*10-.75)*(2*math.pi/3))+1).toDouble();
     case 'Bounce':
       if(t<1/2.75)return 7.5625*t*t;
       if(t<2/2.75){final x=t-1.5/2.75;return 7.5625*x*x+.75;}
       if(t<2.5/2.75){final x=t-2.25/2.75;return 7.5625*x*x+.9375;}
       final x=t-2.625/2.75;return (7.5625*x*x+.984375).clamp(0.0,1.0).toDouble();
-    case 'Back': return (t*t*((1.70158+1)*t-1.70158)).clamp(0.0,1.0).toDouble();
+    case 'Back': return (t*t*((1.70158+1)*t-1.70158)).toDouble();
     default: return _bezierProgress(t,first,second);
   }
 }
