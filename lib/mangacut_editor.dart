@@ -28,15 +28,16 @@ class MangaCutEditor extends StatefulWidget {
 class _RigBone {
   String id, name, parent;
   Offset a, b;
+  Offset restA,restB;
   double rotation;
   List<int> keys;
   final Map<int,double> rotationKeys;
   final Map<int,String> easingKeys;
   final Map<int,double> overshootKeys;
   final Map<int,Offset> curveHandle1Keys,curveHandle2Keys,aKeys,bKeys;
-  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys, Map<int,String>? easingKeys, Map<int,double>? overshootKeys, Map<int,Offset>? curveHandle1Keys, Map<int,Offset>? curveHandle2Keys, Map<int,Offset>? aKeys, Map<int,Offset>? bKeys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {}, easingKeys = easingKeys ?? {}, overshootKeys = overshootKeys ?? {}, curveHandle1Keys=curveHandle1Keys??{},curveHandle2Keys=curveHandle2Keys??{},aKeys=aKeys??{},bKeys=bKeys??{};
-  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v)),'aKeys':aKeys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'bKeys':bKeys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'easingKeys':easingKeys.map((k,v)=>MapEntry(k.toString(),v)),'overshootKeys':overshootKeys.map((k,v)=>MapEntry(k.toString(),v)),'curveHandle1Keys':curveHandle1Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'curveHandle2Keys':curveHandle2Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy]))};
-  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),aKeys:(j['aKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),bKeys:(j['bKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),easingKeys:(j['easingKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),v.toString())),overshootKeys:(j['overshootKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),curveHandle1Keys:(j['curveHandle1Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),curveHandle2Keys:(j['curveHandle2Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))));
+  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, Offset? restA,Offset? restB, List<int>? keys, Map<int,double>? rotationKeys, Map<int,String>? easingKeys, Map<int,double>? overshootKeys, Map<int,Offset>? curveHandle1Keys, Map<int,Offset>? curveHandle2Keys, Map<int,Offset>? aKeys, Map<int,Offset>? bKeys}) : restA=restA??a,restB=restB??b,keys = keys ?? [], rotationKeys = rotationKeys ?? {}, easingKeys = easingKeys ?? {}, overshootKeys = overshootKeys ?? {}, curveHandle1Keys=curveHandle1Keys??{},curveHandle2Keys=curveHandle2Keys??{},aKeys=aKeys??{},bKeys=bKeys??{};
+  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'restA':[restA.dx,restA.dy],'restB':[restB.dx,restB.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v)),'aKeys':aKeys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'bKeys':bKeys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'easingKeys':easingKeys.map((k,v)=>MapEntry(k.toString(),v)),'overshootKeys':overshootKeys.map((k,v)=>MapEntry(k.toString(),v)),'curveHandle1Keys':curveHandle1Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'curveHandle2Keys':curveHandle2Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy]))};
+  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,restA:j['restA']==null?null:Offset((j['restA'][0] as num).toDouble(),(j['restA'][1] as num).toDouble()),restB:j['restB']==null?null:Offset((j['restB'][0] as num).toDouble(),(j['restB'][1] as num).toDouble()),keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),aKeys:(j['aKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),bKeys:(j['bKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),easingKeys:(j['easingKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),v.toString())),overshootKeys:(j['overshootKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),curveHandle1Keys:(j['curveHandle1Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),curveHandle2Keys:(j['curveHandle2Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))));
 }
 
 class MangaCutEffectClip {
@@ -633,28 +634,38 @@ class _RigPainter extends CustomPainter {
       if(bone.rotation.abs()<.0001)continue;
       final localA=Offset(bone.a.dx*size.width,bone.a.dy*size.height);
       final localB=Offset(bone.b.dx*size.width,bone.b.dy*size.height);
-      final rotatedB=localA+Offset(
-        (localB-localA).dx*math.cos(bone.rotation)-(localB-localA).dy*math.sin(bone.rotation),
-        (localB-localA).dx*math.sin(bone.rotation)+(localB-localA).dy*math.cos(bone.rotation),
-      );
-      final a=_applyParentTransforms(i,localA,size);
-      final b=_applyParentTransforms(i,rotatedB,size);
-      final segment=b-a;
-      final lengthSquared=segment.dx*segment.dx+segment.dy*segment.dy;
-      final projection=lengthSquared==0?0.0:(((point-a).dx*segment.dx+(point-a).dy*segment.dy)/lengthSquared).clamp(0.0,1.0).toDouble();
-      final nearest=a+segment*projection;
-      final distance=(point-nearest).distance;
+      final restA=Offset(bone.restA.dx*size.width,bone.restA.dy*size.height);
+      final restB=Offset(bone.restB.dx*size.width,bone.restB.dy*size.height);
+      final rotatedB=localA+Offset((localB-localA).dx*math.cos(bone.rotation)-(localB-localA).dy*math.sin(bone.rotation),(localB-localA).dx*math.sin(bone.rotation)+(localB-localA).dy*math.cos(bone.rotation));
+      final currentA=_applyParentTransforms(i,localA,size);
+      final currentB=_applyParentTransforms(i,rotatedB,size);
+      final restVector=restB-restA,currentVector=currentB-currentA;
+      final restLength=restVector.distance,currentLength=currentVector.distance;
+      if(restLength<.001)continue;
+      final restAngle=math.atan2(restVector.dy,restVector.dx);
+      final currentAngle=math.atan2(currentVector.dy,currentVector.dx);
+      final angleDelta=currentAngle-restAngle;
+      final scale=currentLength/restLength;
+      final relative=point-restA;
+      final localX=relative.dx*math.cos(restAngle)+relative.dy*math.sin(restAngle);
+      final localY=-relative.dx*math.sin(restAngle)+relative.dy*math.cos(restAngle);
+      final transformed=currentA+Offset(localX*scale*math.cos(currentAngle)-localY*scale*math.sin(currentAngle),localX*scale*math.sin(currentAngle)+localY*scale*math.cos(currentAngle));
       final hasPaintedWeights=weights.any((stroke)=>stroke.boneId==bone.id);
-      if(!hasPaintedWeights&&distance>=radius)continue;
-      final influence=1-distance/radius;
-      final weight=influence*influence*(3-2*influence);
-      final painted=_paintedWeight(bone.id,point,size);
-      final influenceWeight=hasPaintedWeights?painted:weight;
+      double influenceWeight;
+      if(hasPaintedWeights){
+        influenceWeight=_paintedWeight(bone.id,point,size);
+      }else{
+        final segment=currentB-currentA;
+        final lengthSquared=segment.dx*segment.dx+segment.dy*segment.dy;
+        final projection=lengthSquared==0?0.0:(((point-currentA).dx*segment.dx+(point-currentA).dy*segment.dy)/lengthSquared).clamp(0.0,1.0).toDouble();
+        final nearest=currentA+segment*projection;
+        final distance=(point-nearest).distance;
+        if(distance>=radius)continue;
+        final falloff=1-distance/radius;
+        influenceWeight=falloff*falloff*(3-2*falloff);
+      }
       if(influenceWeight<=0)continue;
-      final angle=bone.rotation*influenceWeight;
-      final delta=point-a;
-      final rotated=a+Offset(delta.dx*math.cos(angle)-delta.dy*math.sin(angle),delta.dx*math.sin(angle)+delta.dy*math.cos(angle));
-      point=Offset.lerp(point,rotated,influenceWeight)!;
+      point=Offset.lerp(point,transformed,influenceWeight)!;
     }
     return point;
   }
