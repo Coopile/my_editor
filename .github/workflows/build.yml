@@ -1,5 +1,5 @@
 name: Build IPA
-on: [workflow_dispatch]
+on: [workflow_dispatch, push]
 jobs:
   build:
     runs-on: macos-latest
@@ -9,6 +9,8 @@ jobs:
         with:
           channel: stable
       - run: flutter pub get
+      - name: Analyze Dart source
+        run: flutter analyze --no-pub > flutter-analyze.log 2>&1 || true
       - name: Build unsigned iOS device app
         run: |
           set -o pipefail
@@ -23,10 +25,12 @@ jobs:
         with:
           name: app-ipa
           path: app.ipa
-      - name: Upload iOS build log on failure
-        if: failure()
+      - name: Upload build diagnostics
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: ios-build-diagnostics
-          path: flutter-ios-build.log
+          path: |
+            flutter-ios-build.log
+            flutter-analyze.log
           if-no-files-found: ignore
