@@ -158,7 +158,30 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       }
     },
     onPanStart:(d){if(_tab==1||_tab==2){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).add([p]));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);final b=_bones[_selectedBone];_dragBoneEnd=(b.a-p).distance<(b.b-p).distance?0:1;}},
-    onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));if(_tab==1&&_maskErase){final radius=(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.002,.5);setState((){for(final stroke in _maskStrokes){stroke.removeWhere((point)=>(point-p).distance<=radius);} _maskStrokes.removeWhere((stroke)=>stroke.isEmpty);});}else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
+    onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));if(_tab==1&&_maskErase){
+      final radius=(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.002,.5).toDouble();
+      setState((){
+        final remaining=<List<Offset>>[];
+        for(final stroke in _maskStrokes){
+          if(stroke.isEmpty)continue;
+          final sampled=<Offset>[stroke.first];
+          for(var i=1;i<stroke.length;i++){
+            final from=stroke[i-1],to=stroke[i];final distance=(to-from).distance;
+            final steps=math.max(1,(distance/(radius*.35)).ceil());
+            for(var step=1;step<=steps;step++){sampled.add(Offset.lerp(from,to,step/steps)!);}
+          }
+          var segment=<Offset>[];
+          for(final point in sampled){
+            if((point-p).distance<=radius){
+              if(segment.length>=2)remaining.add(segment);
+              segment=<Offset>[];
+            }else{segment.add(point);}
+          }
+          if(segment.length>=2)remaining.add(segment);
+        }
+        _maskStrokes..clear()..addAll(remaining);
+      });
+    }else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
