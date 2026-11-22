@@ -78,6 +78,85 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   }
   Future<ui.Image> _decodeImage(Uint8List bytes) async { final codec=await ui.instantiateImageCodec(bytes); final frame=await codec.getNextFrame(); return frame.image; }
   Future<void> _pickSourceImage() async { final picked=await ImagePicker().pickImage(source:ImageSource.gallery,imageQuality:95); if(picked==null)return; final docs=await getApplicationDocumentsDirectory(); final ext=picked.path.contains('.')?picked.path.substring(picked.path.lastIndexOf('.')):'.png'; final saved=await File(picked.path).copy('${docs.path}/manga_${widget.projectId}$ext'); final bytes=await saved.readAsBytes(); final decoded=await _decodeImage(bytes); if(!mounted)return; setState((){_sourceImage=decoded;_sourceImagePath=saved.path;_maskStrokes.clear();_liquifyStrokes.clear();}); await _save(); }
+  Future<void> _inpaintMaskedArea() async {
+    final image=_sourceImage;
+    if(image==null||_maskStrokes.isEmpty){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Import an image and paint the area to repair first.')));
+      return;
+    }
+    final data=await image.toByteData(format:ui.ImageByteFormat.rawRgba);
+    if(data==null)return;
+    final width=image.width,height=image.height,count=width*height;
+    final pixels=Uint8List.fromList(data.buffer.asUint8List());
+    final mask=Uint8List(count),known=Uint8List(count);
+    final radius=math.max(1.0,_brush*math.min(width,height)/500.0);
+    void markDisk(double cx,double cy){
+      final left=math.max(0,(cx-radius).floor()),right=math.min(width-1,(cx+radius).ceil());
+      final top=math.max(0,(cy-radius).floor()),bottom=math.min(height-1,(cy+radius).ceil());
+      for(var y=top;y<=bottom;y++)for(var x=left;x<=right;x++){
+        final dx=x-cx,dy=y-cy;
+        if(dx*dx+dy*dy<=radius*radius)mask[y*width+x]=1;
+      }
+    }
+    for(final stroke in _maskStrokes){
+      if(stroke.length==1){markDisk(stroke.first.dx*width,stroke.first.dy*height);continue;}
+      for(var i=1;i<stroke.length;i++){
+        final a=stroke[i-1],b=stroke[i];
+        final ax=a.dx*width,ay=a.dy*height,bx=b.dx*width,by=b.dy*height;
+        final distance=math.sqrt((bx-ax)*(bx-ax)+(by-ay)*(by-ay));
+        final steps=math.max(1,(distance/(radius*.4)).ceil());
+        for(var step=0;step<=steps;step++){
+          final t=step/steps;markDisk(ax+(bx-ax)*t,ay+(by-ay)*t);
+        }
+      }
+    }
+    for(var i=0;i<count;i++)known[i]=mask[i]==0?1:0;
+    final queue=<int>[];
+    for(var y=0;y<height;y++)for(var x=0;x<width;x++){
+      final index=y*width+x;
+      if(mask[index]==0)continue;
+      if((x>0&&known[index-1]==1)||(x+1<width&&known[index+1]==1)||(y>0&&known[index-width]==1)||(y+1<height&&known[index+width]==1)){
+        queue.add(index);
+      }
+    }
+    for(final index in queue)known[index]=2;
+    var head=0;
+    while(head<queue.length){
+      final index=queue[head++],x=index%width,y=index~/width;
+      var r=0,g=0,b=0,a=0,n=0;
+      void addNeighbor(int neighbor){
+        if(known[neighbor]==0)return;
+        final offset=neighbor*4;
+        r+=pixels[offset];g+=pixels[offset+1];b+=pixels[offset+2];a+=pixels[offset+3];n++;
+      }
+      if(x>0)addNeighbor(index-1);
+      if(x+1<width)addNeighbor(index+1);
+      if(y>0)addNeighbor(index-width);
+      if(y+1<height)addNeighbor(index+width);
+      if(n==0)continue;
+      final offset=index*4;
+      pixels[offset]=(r/n).round();pixels[offset+1]=(g/n).round();pixels[offset+2]=(b/n).round();pixels[offset+3]=(a/n).round();
+      known[index]=1;
+      if(x>0&&mask[index-1]==1&&known[index-1]==0){known[index-1]=2;queue.add(index-1);}
+      if(x+1<width&&mask[index+1]==1&&known[index+1]==0){known[index+1]=2;queue.add(index+1);}
+      if(y>0&&mask[index-width]==1&&known[index-width]==0){known[index-width]=2;queue.add(index-width);}
+      if(y+1<height&&mask[index+width]==1&&known[index+width]==0){known[index+width]=2;queue.add(index+width);}
+    }
+    final completer=Completer<ui.Image>();
+    ui.decodeImageFromPixels(pixels,width,height,ui.PixelFormat.rgba8888,completer.complete);
+    final repaired=await completer.future;
+    final png=await repaired.toByteData(format:ui.ImageByteFormat.png);
+    if(png!=null&&_sourceImagePath!=null)await File(_sourceImagePath!).writeAsBytes(png.buffer.asUint8List(),flush:true);
+    if(!mounted){repaired.dispose();return;}
+    setState((){
+      _sourceImage?.dispose();
+      _sourceImage=repaired;
+      _maskStrokes.clear();
+    });
+    await _save();
+    if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Quick inpaint completed. This uses edge-colour propagation, so complex backgrounds may need manual cleanup.')));
+  }
+
   Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList()})); }
   void _changed(){setState((){});_save();}
   void _addBone(){
@@ -247,7 +326,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       for(int i=0;i<_bones.length;i++)ListTile(dense:true,selected:_selectedBone==i,leading:const Icon(Icons.account_tree,size:17),title:TextField(controller:TextEditingController(text:_bones[i].name),style:const TextStyle(fontSize:12),decoration:const InputDecoration(border:InputBorder.none,isDense:true),onSubmitted:(v){_bones[i].name=v;_changed();}),subtitle:Text(_bones[i].parent.isEmpty?'Root bone':'Child bone',style:const TextStyle(fontSize:9,color:Colors.white38)),onTap:()=>setState(()=>_selectedBone=i),trailing:IconButton(icon:const Icon(Icons.close,size:16),onPressed:()=>setState((){_selectedBone=i;_deleteBone();}))),
       if(_selectedBone>=0&&_selectedBone<_bones.length)DropdownButtonFormField<String>(value:_bones[_selectedBone].parent.isEmpty?null:_bones[_selectedBone].parent,decoration:const InputDecoration(labelText:'Parent bone'),items:[const DropdownMenuItem(value:'',child:Text('No parent')),for(final b in _bones.where((b)=>b.id!=_bones[_selectedBone].id))DropdownMenuItem(value:b.id,child:Text(b.name))],onChanged:(v){_bones[_selectedBone].parent=v??'';_changed();}),
     ] else if(_tab==1)...[
-      const Text('Paint a mask directly on the canvas. Mask strokes are stored per workspace.',style:TextStyle(fontSize:11,color:Colors.white60)),SwitchListTile(value:_maskErase,onChanged:(v)=>setState(()=>_maskErase=v),title:const Text('Erase mask',style:TextStyle(fontSize:12))),_slider('Brush size',_brush,4,100,(v)=>setState(()=>_brush=v)),TextButton.icon(onPressed:()=>setState(()=>_maskStrokes.clear()),icon:const Icon(Icons.delete_outline),label:const Text('Clear mask')),
+      const Text('Paint a mask directly on the canvas. Mask strokes are stored per workspace.',style:TextStyle(fontSize:11,color:Colors.white60)),SwitchListTile(value:_maskErase,onChanged:(v)=>setState(()=>_maskErase=v),title:const Text('Erase mask',style:TextStyle(fontSize:12))),_slider('Brush size',_brush,4,100,(v)=>setState(()=>_brush=v)),FilledButton.icon(onPressed:_sourceImage==null?null:_inpaintMaskedArea,icon:const Icon(Icons.auto_fix_high),label:const Text('Inpaint masked area')),TextButton.icon(onPressed:()=>setState(()=>_maskStrokes.clear()),icon:const Icon(Icons.delete_outline),label:const Text('Clear mask')),
     ] else if(_tab==2)...[
       const Text('Liquify brush · drag on the canvas to deform the preview mesh.',style:TextStyle(fontSize:11,color:Colors.white60)),_slider('Brush size',_brush,8,120,(v)=>setState(()=>_brush=v)),_slider('Strength',_strength,.05,1,(v)=>setState(()=>_strength=v)),TextButton.icon(onPressed:()=>setState(()=>_liquifyStrokes.clear()),icon:const Icon(Icons.refresh),label:const Text('Reset liquify')),
     ] else if(_tab==3)...[
