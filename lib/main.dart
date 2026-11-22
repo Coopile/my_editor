@@ -2516,6 +2516,16 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 IconButton(tooltip: 'Add keyframe', visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 30), padding: EdgeInsets.zero, onPressed: _sel == null ? null : _addKeyframeNow, icon: const Icon(Icons.diamond_outlined, size: 16, color: Color(0xFF79C8FF))),
                 IconButton(tooltip: 'Delete selected layer', visualDensity: VisualDensity.compact, constraints: const BoxConstraints.tightFor(width: 30, height: 30), padding: EdgeInsets.zero, onPressed: _sel == null ? null : _deleteSelected, icon: const Icon(Icons.delete_outline, size: 16, color: Colors.redAccent)),
               ])))),
+              if (_sel != null)
+                Positioned(left: 5, top: 82, child: Material(
+                  color: const Color(0xCC171C2A),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Column(mainAxisSize: MainAxisSize.min, children: [
+                    IconButton(tooltip: 'Open keyframe curve editor', visualDensity: VisualDensity.compact, onPressed: _openKeyframeEditor, icon: const Icon(Icons.show_chart_rounded, color: Color(0xFF20E3A0))),
+                    IconButton(tooltip: 'Add camera layer', visualDensity: VisualDensity.compact, onPressed: _addCamera, icon: const Icon(Icons.videocam_rounded, color: Colors.white70)),
+                    IconButton(tooltip: _pivotMode ? 'Finish pivot editing' : 'Edit pivot', visualDensity: VisualDensity.compact, onPressed: _togglePivotMode, icon: Icon(Icons.control_camera_rounded, color: _pivotMode ? const Color(0xFF20E36F) : Colors.white70)),
+                  ]),
+                )),
               if (_showGrid)
                 const Positioned.fill(
                   child: IgnorePointer(
