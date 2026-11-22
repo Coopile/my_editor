@@ -541,7 +541,7 @@ class Layer {
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList()
       ..effectKfs = effectKfs.map((k) => EffectKF(k.t, k.strength, k.speed)).toList()
-      ..mangaEffects = mangaEffects.map((e) => MangaCutEffectClip(e.id,e.name,e.target,e.start,e.end,strength:e.strength,keys:List<int>.of(e.keys),strengthKeys:Map<double,double>.of(e.strengthKeys))).toList();
+      ..mangaEffects = mangaEffects.map((e) => MangaCutEffectClip(e.id,e.name,e.target,e.start,e.end,strength:e.strength,keys:List<int>.of(e.keys),strengthKeys:Map<double,double>.of(e.strengthKeys),parameters:Map<String,double>.of(e.parameters),parameterKeys:e.parameterKeys.map((name,frames)=>MapEntry(name,Map<double,double>.of(frames))))).toList();
     return clone;
   }
 
@@ -3813,7 +3813,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       final index = _layers.indexWhere((layer) => layer.text == entry.key);
                       if (index < 0) continue;
                       final targetClips = entry.value;
-                      _layers[index].mangaEffects = targetClips.map((clip)=>MangaCutEffectClip(clip.id,clip.name,clip.target,clip.start,clip.end,strength:clip.strength,keys:List<int>.of(clip.keys),strengthKeys:Map<double,double>.of(clip.strengthKeys))).toList();
+                      _layers[index].mangaEffects = targetClips.map((clip)=>MangaCutEffectClip(clip.id,clip.name,clip.target,clip.start,clip.end,strength:clip.strength,keys:List<int>.of(clip.keys),strengthKeys:Map<double,double>.of(clip.strengthKeys),parameters:Map<String,double>.of(clip.parameters),parameterKeys:clip.parameterKeys.map((name,frames)=>MapEntry(name,Map<double,double>.of(frames))))).toList();
                     }
                   });
                   _saveProject();
