@@ -75,6 +75,21 @@ class MangaCutEffectClip {
   factory MangaCutEffectClip.fromJson(Map<String,dynamic> j)=>MangaCutEffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>(),strengthKeys:(j['strengthKeys'] as Map? ?? {}).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())),parameters:(j['parameters'] as Map?)?.map((k,v)=>MapEntry(k.toString(),(v as num).toDouble()))??{'amplitude':1.0,'frequency':1.0,'phase':0.0,'angle':0.0,'scale':1.0},parameterKeys:(j['parameterKeys'] as Map? ?? {}).map((name,frames)=>MapEntry(name.toString(),(frames as Map).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())))));
 }
 
+
+class _LiquifyStroke {
+  final String mode;
+  final List<Offset> points;
+  final double radius, strength;
+  const _LiquifyStroke(this.mode, this.points, this.radius, this.strength);
+  Map<String,dynamic> toJson()=>{'mode':mode,'points':points.map((p)=>[p.dx,p.dy]).toList(),'radius':radius,'strength':strength};
+  factory _LiquifyStroke.fromJson(Map<String,dynamic> j)=>_LiquifyStroke(
+    (j['mode'] as String?)??'Drag',
+    (j['points'] as List? ?? []).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList(),
+    (j['radius'] as num?)?.toDouble()??.06,
+    (j['strength'] as num?)?.toDouble()??.55,
+  );
+}
+
 class _WeightStroke {
   final String boneId;
   final List<Offset> points;
@@ -89,7 +104,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   final List<_RigBone> _bones=[];
   final List<MangaCutEffectClip> _effects=[];
   final List<List<Offset>> _maskStrokes=[];
-  final List<List<Offset>> _liquifyStrokes=[];
+  final List<_LiquifyStroke> _liquifyStrokes=[];
+  String _liquifyMode='Drag';
   final List<_WeightStroke> _weightStrokes=[];
   List<Offset> _activeWeightStroke=[];
   bool _eraseWeight=false;
@@ -118,7 +134,14 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       _time=(j['time'] as num?)?.toInt() ?? 0;
       _sourceImagePath=j['sourceImagePath'] as String?;
       _maskStrokes..clear()..addAll((j['maskStrokes'] as List? ?? []).map((stroke)=>(stroke as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList()));
-      _liquifyStrokes..clear()..addAll((j['liquifyStrokes'] as List? ?? []).map((stroke)=>(stroke as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList()));
+      _liquifyStrokes.clear();
+      for(final stroke in (j['liquifyStrokes'] as List? ?? [])){
+        if(stroke is Map){
+          _liquifyStrokes.add(_LiquifyStroke.fromJson(Map<String,dynamic>.from(stroke)));
+        }else if(stroke is List){
+          _liquifyStrokes.add(_LiquifyStroke('Drag',stroke.map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList(),.06,.55));
+        }
+      }
       _weightStrokes..clear()..addAll((j['weightStrokes'] as List? ?? []).map((v)=>_WeightStroke.fromJson(Map<String,dynamic>.from(v))));
     }); if(_sourceImagePath!=null){try{final bytes=await File(_sourceImagePath!).readAsBytes();final decoded=await _decodeImage(bytes);if(mounted)setState(()=>_sourceImage=decoded);}catch(_){}} } catch(_){}
   }
@@ -315,7 +338,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     }
   }
 
-  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'weightStrokes':_weightStrokes.map((v)=>v.toJson()).toList()})); }
+  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.toJson()).toList(),'weightStrokes':_weightStrokes.map((v)=>v.toJson()).toList()})); }
   void _changed(){setState((){});_save();}
   void _addBone(){
     final n=_bones.length+1; final x=.28+(n%3)*.16, y=.28+(n%4)*.11;
@@ -483,7 +506,13 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         if(best>=0)setState(()=>_selectedBone=best);
       }
     },
-    onPanStart:(d){if(_tab==5&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);_activeWeightStroke=[p];}else if(_tab==1||_tab==2){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).add([p]));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);final b=_bones[_selectedBone];_dragBoneEnd=(b.a-p).distance<(b.b-p).distance?0:1;}},
+    onPanStart:(d){if(_tab==5&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);_activeWeightStroke=[p];}else if(_tab==1||_tab==2){
+      final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);
+      setState((){
+        if(_tab==1){_maskStrokes.add([p]);}
+        else{_liquifyStrokes.add(_LiquifyStroke(_liquifyMode,[p],(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_strength));}
+      });
+    }else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);final b=_bones[_selectedBone];_dragBoneEnd=(b.a-p).distance<(b.b-p).distance?0:1;}},
     onPanUpdate:(d){if(_tab==5&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_activeWeightStroke.add(p));}else if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));if(_tab==1&&_maskErase){
       final radius=(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.002,.5).toDouble();
       setState((){
@@ -507,7 +536,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         }
         _maskStrokes..clear()..addAll(remaining);
       });
-    }else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
+    }else if(_tab==1){setState(()=>_maskStrokes.last.add(p));}else{setState(()=>_liquifyStrokes.last.points.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
     onPanEnd:(d){if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?-_strength:_strength));_activeWeightStroke.clear();});_save();}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
@@ -524,7 +553,11 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     ] else if(_tab==1)...[
       const Text('Paint a mask directly on the canvas. Mask strokes are stored per workspace.',style:TextStyle(fontSize:11,color:Colors.white60)),SwitchListTile(value:_maskErase,onChanged:(v)=>setState(()=>_maskErase=v),title:const Text('Erase mask',style:TextStyle(fontSize:12))),_slider('Brush size',_brush,4,100,(v)=>setState(()=>_brush=v)),FilledButton.icon(onPressed:_sourceImage==null?null:_inpaintMaskedArea,icon:const Icon(Icons.auto_fix_high),label:const Text('Inpaint masked area')),TextButton.icon(onPressed:()=>setState(()=>_maskStrokes.clear()),icon:const Icon(Icons.delete_outline),label:const Text('Clear mask')),
     ] else if(_tab==2)...[
-      const Text('Liquify brush · drag on the canvas to deform the preview mesh.',style:TextStyle(fontSize:11,color:Colors.white60)),_slider('Brush size',_brush,8,120,(v)=>setState(()=>_brush=v)),_slider('Strength',_strength,.05,1,(v)=>setState(()=>_strength=v)),TextButton.icon(onPressed:()=>setState(()=>_liquifyStrokes.clear()),icon:const Icon(Icons.refresh),label:const Text('Reset liquify')),
+      const Text('Liquify Pen · reshape image pixels directly with a brush, like ibisPaint.',style:TextStyle(fontSize:11,color:Colors.white60)),
+      DropdownButtonFormField<String>(value:_liquifyMode,decoration:const InputDecoration(labelText:'Liquify mode'),items:const ['Drag','Shrink','Expand','Smoothen','Revert'].map((mode)=>DropdownMenuItem(value:mode,child:Text(mode))).toList(),onChanged:(v)=>setState(()=>_liquifyMode=v??_liquifyMode)),
+      _slider('Brush size',_brush,8,120,(v)=>setState(()=>_brush=v)),
+      _slider('Strength',_strength,.05,1,(v)=>setState(()=>_strength=v)),
+      TextButton.icon(onPressed:()=>setState(()=>_liquifyStrokes.clear()),icon:const Icon(Icons.refresh),label:const Text('Reset liquify')),
     ] else if(_tab==3)...[
       const Text('Select a bone, move its joints on the canvas, then add keyframes on the timeline.',style:TextStyle(fontSize:11,color:Colors.white60)),if(_selectedBone>=0&&_selectedBone<_bones.length)_slider('Rotation',_bones[_selectedBone].rotation,-math.pi,math.pi,(v){_bones[_selectedBone].rotation=v;_changed();}),FilledButton.icon(onPressed:_addKey,icon:const Icon(Icons.key),label:const Text('Keyframe selected')),const SizedBox(height:8),OutlinedButton.icon(onPressed:_openGraphEditor,icon:const Icon(Icons.show_chart),label:const Text('Graph / easing editor')),
     ] else if(_tab==5)...[
@@ -550,7 +583,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
 }
 
 class _RigPainter extends CustomPainter {
-  final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks,liquify; final List<_WeightStroke> weights; final List<MangaCutEffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
+  final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks; final List<_LiquifyStroke> liquify; final List<_WeightStroke> weights; final List<MangaCutEffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
   _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.weights,this.tab,this.brush,this.strength,this.sourceImage,this.time,this.duration,this.effects);
   void paintComposite(Canvas canvas,Size size){
     if(sourceImage==null)return;
@@ -579,7 +612,11 @@ class _RigPainter extends CustomPainter {
       c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B));
       for(final stroke in masks){final p=Paint()..color=Colors.white.withOpacity(.8)..strokeWidth=brush..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
     }
-    for(final stroke in liquify){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.8)..strokeWidth=2..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
+    for(final stroke in liquify){
+      final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.8)..strokeWidth=2..style=PaintingStyle.stroke;
+      for(int i=1;i<stroke.points.length;i++)c.drawLine(Offset(stroke.points[i-1].dx*s.width,stroke.points[i-1].dy*s.height),Offset(stroke.points[i].dx*s.width,stroke.points[i].dy*s.height),p);
+      if(tab==2&&stroke.points.isNotEmpty){final end=stroke.points.last;final center=Offset(end.dx*s.width,end.dy*s.height);c.drawCircle(center,stroke.radius*math.min(s.width,s.height),Paint()..color=const Color(0xFFB78BFF).withOpacity(.12));c.drawCircle(center,stroke.radius*math.min(s.width,s.height),p);}
+    }
     if(tab==5){for(final stroke in weights){final boneIndex=bones.indexWhere((b)=>b.id==stroke.boneId);if(boneIndex<0)continue;final p=Paint()..color=(stroke.value<0?Colors.redAccent:Colors.orange).withOpacity(.62)..strokeWidth=math.max(4.0,stroke.radius*math.min(s.width,s.height)*2)..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(var i=1;i<stroke.points.length;i++){c.drawLine(Offset(stroke.points[i-1].dx*s.width,stroke.points[i-1].dy*s.height),Offset(stroke.points[i].dx*s.width,stroke.points[i].dy*s.height),p);}}}
     for(int i=0;i<bones.length;i++){final b=bones[i];final localA=Offset(b.a.dx*s.width,b.a.dy*s.height),localB=Offset(b.b.dx*s.width,b.b.dy*s.height);final rotatedB=localA+Offset((localB-localA).dx*math.cos(b.rotation)-(localB-localA).dy*math.sin(b.rotation),(localB-localA).dx*math.sin(b.rotation)+(localB-localA).dy*math.cos(b.rotation));final a=_applyParentTransforms(i,localA,s),z=_applyParentTransforms(i,rotatedB,s);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
@@ -688,7 +725,7 @@ class _RigPainter extends CustomPainter {
     return point;
   }
   void _drawImageMesh(Canvas canvas,Size size,ui.Image image){
-    const cols=24, rows=24;
+    const cols=64, rows=64;
     final positions=<Offset>[], tex=<Offset>[], indices=<int>[];
     for(var y=0;y<=rows;y++){
       for(var x=0;x<=cols;x++){
@@ -701,19 +738,41 @@ class _RigPainter extends CustomPainter {
         if(wind>0){px+=math.sin(v*9*windFrequency+time*.006)*wind*size.width*.025*(1-v*.35);py+=math.cos(u*7*windFrequency+time*.004)*wind*size.height*.008;}
         final liquifyEffect=_effectStrength('Liquify');
         if(liquifyEffect>0){final cx=size.width*.5,cy=size.height*.5,dx=px-cx,dy=py-cy,dist=math.sqrt(dx*dx+dy*dy),reach=math.min(size.width,size.height)*.48;if(dist<reach){final falloff=1-dist/reach;final angle=liquifyEffect*.35*falloff;px=cx+dx*math.cos(angle)-dy*math.sin(angle);py=cy+dx*math.sin(angle)+dy*math.cos(angle);}}
-        {
-          for(final stroke in liquify){
-            for(var k=1;k<stroke.length;k++){
-              final prev=stroke[k-1],cur=stroke[k];
-              final dx=cur.dx-prev.dx,dy=cur.dy-prev.dy;
-              final cx=cur.dx*size.width,cy=cur.dy*size.height;
-              final vx=px-cx,vy=py-cy;
-              final radius=brush*1.8,dist=math.sqrt(vx*vx+vy*vy);
-              if(dist<radius){
-                final falloff=1-dist/radius;
-                px-=dx*size.width*strength*falloff*2.2;
-                py-=dy*size.height*strength*falloff*2.2;
-              }
+        final basePoint=Offset(px,py);
+        for(final stroke in liquify){
+          final radius=stroke.radius*math.min(size.width,size.height);
+          if(radius<=0)continue;
+          for(var k=0;k<stroke.points.length;k++){
+            final current=stroke.points[k];
+            final center=Offset(current.dx*size.width,current.dy*size.height);
+            final delta=k==0?Offset.zero:Offset((current.dx-stroke.points[k-1].dx)*size.width,(current.dy-stroke.points[k-1].dy)*size.height);
+            final vx=px-center.dx,vy=py-center.dy;
+            final distance=math.sqrt(vx*vx+vy*vy);
+            if(distance>=radius)continue;
+            final t=(1-distance/radius).clamp(0.0,1.0).toDouble();
+            final falloff=t*t*(3-2*t);
+            switch(stroke.mode){
+              case 'Drag':
+                px+=delta.dx*stroke.strength*falloff;
+                py+=delta.dy*stroke.strength*falloff;
+                break;
+              case 'Shrink':
+              case 'Expand':
+                if(distance>.001){
+                  final direction=stroke.mode=='Expand'?1.0:-1.0;
+                  final amount=radius*stroke.strength*.055*falloff*direction;
+                  px+=(vx/distance)*amount;
+                  py+=(vy/distance)*amount;
+                }
+                break;
+              case 'Smoothen':
+                px+=(basePoint.dx-px)*stroke.strength*falloff*.16;
+                py+=(basePoint.dy-py)*stroke.strength*falloff*.16;
+                break;
+              case 'Revert':
+                px+=(basePoint.dx-px)*stroke.strength*falloff;
+                py+=(basePoint.dy-py)*stroke.strength*falloff;
+                break;
             }
           }
         }
