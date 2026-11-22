@@ -14,7 +14,8 @@ class MangaCutEditor extends StatefulWidget {
   final String projectName;
   final List<String> layerNames;
   final ValueChanged<List<MangaCutEffectClip>>? onApplyEffects;
-  const MangaCutEditor({super.key, required this.projectId, required this.projectName, required this.layerNames, this.onApplyEffects});
+  final void Function(String target,String imagePath)? onApplyImage;
+  const MangaCutEditor({super.key, required this.projectId, required this.projectName, required this.layerNames, this.onApplyEffects, this.onApplyImage});
 
   @override
   State<MangaCutEditor> createState() => _MangaCutEditorState();
@@ -159,6 +160,33 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Quick inpaint completed. This uses edge-colour propagation, so complex backgrounds may need manual cleanup.')));
   }
 
+  Future<void> _applyCompositeToMainLayer() async {
+    if(_sourceImage==null||widget.onApplyImage==null){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Import an image before applying a composite.')));
+      return;
+    }
+    final image=_sourceImage!;
+    final recorder=ui.PictureRecorder();
+    final canvas=Canvas(recorder);
+    final outputSize=Size(image.width.toDouble(),image.height.toDouble());
+    final painter=_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush*image.width/500.0,_strength,image,_time,_duration,_effects);
+    painter.paintComposite(canvas,outputSize);
+    final picture=recorder.endRecording();
+    final rendered=await picture.toImage(image.width,image.height);
+    picture.dispose();
+    final png=await rendered.toByteData(format:ui.ImageByteFormat.png);
+    rendered.dispose();
+    if(png==null||!mounted)return;
+    final docs=await getApplicationDocumentsDirectory();
+    final output=File('${docs.path}/mangacut_${widget.projectId}_composite.png');
+    await output.writeAsBytes(png.buffer.asUint8List(),flush:true);
+    widget.onApplyImage!(_target,output.path);
+    if(mounted){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Current frame composite applied to the main project. Animation is not baked into this still image.')));
+      Navigator.of(context).pop();
+    }
+  }
+
   Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList()})); }
   void _changed(){setState((){});_save();}
   void _addBone(){
@@ -260,14 +288,14 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
           final width=(effect.end-effect.start);final start=((p.dx-_timelineDragOffset)/size.width).clamp(0.0,1.0-width).toDouble();
           effect.start=start;effect.end=start+width;
         }
-      }else if(_timelineDragKind=='scrub'){_time=t;}
+      }else if(_timelineDragKind=='scrub'){_time=t;for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}}
     });
     _save();
   }
   void _timelinePanEnd(){_timelineDragKind='';_timelineDragIndex=-1;_timelineDragKey=-1;_save();}
   @override
   Widget build(BuildContext context){
-    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace'),IconButton(onPressed:(){widget.onApplyEffects?.call(List.unmodifiable(_effects));Navigator.of(context).pop();},icon:const Icon(Icons.check_circle_outline),tooltip:'Apply effects to main editor')]),
+    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace'),IconButton(onPressed:(){widget.onApplyEffects?.call(List.unmodifiable(_effects));},icon:const Icon(Icons.auto_awesome),tooltip:'Apply effects to main editor'),IconButton(onPressed:_applyCompositeToMainLayer,icon:const Icon(Icons.layers_outlined),tooltip:'Apply current image composite')]),
       body:SafeArea(child:Column(children:[
         _topTabs(),
         Expanded(child:Row(children:[
@@ -347,6 +375,20 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
 class _RigPainter extends CustomPainter {
   final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks,liquify; final List<MangaCutEffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
   _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength,this.sourceImage,this.time,this.duration,this.effects);
+  void paintComposite(Canvas canvas,Size size){
+    if(sourceImage==null)return;
+    canvas.save();
+    _applyMotionEffects(canvas,size);
+    canvas.saveLayer(Offset.zero & size,Paint());
+    _drawImageMesh(canvas,size,sourceImage!);
+    final erase=Paint()..blendMode=BlendMode.dstOut..style=PaintingStyle.stroke..strokeCap=StrokeCap.round..strokeJoin=StrokeJoin.round..strokeWidth=brush;
+    for(final stroke in masks){
+      if(stroke.length==1)canvas.drawCircle(Offset(stroke.first.dx*size.width,stroke.first.dy*size.height),brush/2,Paint()..blendMode=BlendMode.dstOut);
+      for(var i=1;i<stroke.length;i++)canvas.drawLine(Offset(stroke[i-1].dx*size.width,stroke[i-1].dy*size.height),Offset(stroke[i].dx*size.width,stroke[i].dy*size.height),erase);
+    }
+    canvas.restore();
+    canvas.restore();
+  }
   @override void paint(Canvas c,Size s){
     final bg=Paint()..color=const Color(0xFF171A22);c.drawRect(Offset.zero & s,bg);
     final grid=Paint()..color=Colors.white.withOpacity(.045)..strokeWidth=1;
@@ -354,17 +396,7 @@ class _RigPainter extends CustomPainter {
     for(double y=0;y<s.height;y+=24)c.drawLine(Offset(0,y),Offset(s.width,y),grid);
     final center=Offset(s.width*.5,s.height*.5);
     if(sourceImage!=null){
-      c.save();
-      _applyMotionEffects(c,s);
-      c.saveLayer(Offset.zero & s,Paint());
-      _drawImageMesh(c,s,sourceImage!);
-      final erase=Paint()..blendMode=BlendMode.dstOut..style=PaintingStyle.stroke..strokeCap=StrokeCap.round..strokeJoin=StrokeJoin.round..strokeWidth=brush;
-      for(final stroke in masks){
-        if(stroke.length==1){c.drawCircle(Offset(stroke.first.dx*s.width,stroke.first.dy*s.height),brush/2,Paint()..blendMode=BlendMode.dstOut);}
-        for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),erase);
-      }
-      c.restore();
-      c.restore();
+      paintComposite(c,s);
     } else {
       c.drawOval(Rect.fromCenter(center:center,width:s.width*.28,height:s.height*.48),Paint()..color=const Color(0xFF29364A));
       c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B));
