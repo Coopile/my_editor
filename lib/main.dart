@@ -3727,7 +3727,13 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     });
                   } else {
                     final position = index >= 0 ? _layers[index].pos : const Offset(80, 80);
-                    _add(Layer.image(imagePath, position));
+                    final imageLayer = Layer.image(imagePath, position);
+                    if (index >= 0) {
+                      imageLayer.parentIndex = _layers[index].isController
+                          ? index
+                          : _layers[index].parentIndex;
+                    }
+                    _add(imageLayer);
                   }
                   _saveProject();
                 },
