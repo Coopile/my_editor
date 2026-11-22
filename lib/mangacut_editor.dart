@@ -97,8 +97,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       case 'Ease In Out': value=t<.5?4*t*t*t:1-math.pow(-2*t+2,3).toDouble()/2; break;
       case 'Overshoot':
         final amount=bone.overshootKeys[segmentStart]??.18;
-        value=t*t*((amount+1)*t-amount)*2+ t*(1-t)*2;
-        value=t+(value-t);
+        final c1=1.70158*(amount/.18);final c3=c1+1;
+        value=1+c3*math.pow(t-1,3).toDouble()+c1*math.pow(t-1,2).toDouble();
         break;
       default: value=t;
     }
@@ -125,7 +125,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     final keys=bone.rotationKeys.keys.toList()..sort();
     if(keys.length<2){if(!bone.rotationKeys.containsKey(_time))_addKey();if(bone.rotationKeys.length<2){if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Add at least two bone keyframes to edit a motion curve.')));return;}}
     final starts=bone.rotationKeys.keys.where((k)=>k<=_time).toList()..sort();
-    final segment=starts.isEmpty?bone.rotationKeys.keys.reduce(math.min):starts.last;
+    final segment=starts.isEmpty?bone.rotationKeys.keys.reduce((a,b)=>a<b?a:b):starts.last;
     var mode=bone.easingKeys[segment]??'Linear';
     var amount=bone.overshootKeys[segment]??.18;
     await showDialog<void>(context:context,builder:(dialogContext)=>StatefulBuilder(builder:(context,setDialogState)=>AlertDialog(
@@ -408,12 +408,12 @@ class _CurvePreviewPainter extends CustomPainter {
         case 'Ease In':v=t*t*t;break;
         case 'Ease Out':v=1-math.pow(1-t,3).toDouble();break;
         case 'Ease In Out':v=t<.5?4*t*t*t:1-math.pow(-2*t+2,3).toDouble()/2;break;
-        case 'Overshoot':v=t+math.sin(math.pi*t)*overshoot*1.5;break;
+        case 'Overshoot':final c1=1.70158*(overshoot/.18);final c3=c1+1;v=1+c3*math.pow(t-1,3).toDouble()+c1*math.pow(t-1,2).toDouble();break;
       }
       final point=Offset(t*size.width,size.height-v*size.height);
       if(i==0)path.moveTo(point.dx,point.dy);else path.lineTo(point.dx,point.dy);
     }
-    canvas.drawPath(path,Paint()..color=_accent..style=PaintingStyle.stroke..strokeWidth=3);
+    canvas.drawPath(path,Paint()..color=const Color(0xFF8A68FF)..style=PaintingStyle.stroke..strokeWidth=3);
   }
   @override bool shouldRepaint(covariant _CurvePreviewPainter old)=>old.mode!=mode||old.overshoot!=overshoot;
 }
