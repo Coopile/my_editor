@@ -63,12 +63,24 @@ class MangaCutEffectClip {
   factory MangaCutEffectClip.fromJson(Map<String,dynamic> j)=>MangaCutEffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>(),strengthKeys:(j['strengthKeys'] as Map? ?? {}).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())));
 }
 
+class _WeightStroke {
+  final String boneId;
+  final List<Offset> points;
+  final double radius, value;
+  const _WeightStroke(this.boneId,this.points,this.radius,this.value);
+  Map<String,dynamic> toJson()=>{'boneId':boneId,'points':points.map((p)=>[p.dx,p.dy]).toList(),'radius':radius,'value':value};
+  factory _WeightStroke.fromJson(Map<String,dynamic> j)=>_WeightStroke(j['boneId'],(j['points'] as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList(),(j['radius'] as num).toDouble(),(j['value'] as num).toDouble());
+}
+
 class _MangaCutEditorState extends State<MangaCutEditor> {
   static const _bg=Color(0xFF101116), _panel=Color(0xFF1A1C24), _accent=Color(0xFF8A68FF);
   final List<_RigBone> _bones=[];
   final List<MangaCutEffectClip> _effects=[];
   final List<List<Offset>> _maskStrokes=[];
   final List<List<Offset>> _liquifyStrokes=[];
+  final List<_WeightStroke> _weightStrokes=[];
+  List<Offset> _activeWeightStroke=[];
+  bool _eraseWeight=false;
   ui.Image? _sourceImage;
   String? _sourceImagePath;
   int _tab=0, _selectedBone=-1, _selectedEffect=-1, _time=0;
@@ -95,6 +107,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       _sourceImagePath=j['sourceImagePath'] as String?;
       _maskStrokes..clear()..addAll((j['maskStrokes'] as List? ?? []).map((stroke)=>(stroke as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList()));
       _liquifyStrokes..clear()..addAll((j['liquifyStrokes'] as List? ?? []).map((stroke)=>(stroke as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList()));
+      _weightStrokes..clear()..addAll((j['weightStrokes'] as List? ?? []).map((v)=>_WeightStroke.fromJson(Map<String,dynamic>.from(v))));
     }); if(_sourceImagePath!=null){try{final bytes=await File(_sourceImagePath!).readAsBytes();final decoded=await _decodeImage(bytes);if(mounted)setState(()=>_sourceImage=decoded);}catch(_){}} } catch(_){}
   }
   Future<ui.Image> _decodeImage(Uint8List bytes) async { final codec=await ui.instantiateImageCodec(bytes); final frame=await codec.getNextFrame(); return frame.image; }
@@ -270,7 +283,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     }
   }
 
-  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList()})); }
+  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'weightStrokes':_weightStrokes.map((v)=>v.toJson()).toList()})); }
   void _changed(){setState((){});_save();}
   void _addBone(){
     final n=_bones.length+1; final x=.28+(n%3)*.16, y=.28+(n%4)*.11;
@@ -428,7 +441,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       ])));
   }
   Widget _topTabs()=>Container(color:_panel,height:52,child:ListView(scrollDirection:Axis.horizontal,children:[
-    _tabButton('Rigging',Icons.account_tree,0),_tabButton('Mask',Icons.gesture,1),_tabButton('Liquify',Icons.blur_on,2),_tabButton('Animation',Icons.timeline,3),_tabButton('Effects',Icons.auto_awesome,4),
+    _tabButton('Rigging',Icons.account_tree,0),_tabButton('Mask',Icons.gesture,1),_tabButton('Liquify',Icons.blur_on,2),_tabButton('Animation',Icons.timeline,3),_tabButton('Effects',Icons.auto_awesome,4),_tabButton('Weights',Icons.brush,5),
   ]));
   Widget _tabButton(String name,IconData icon,int index)=>Padding(padding:const EdgeInsets.symmetric(horizontal:5,vertical:6),child:ChoiceChip(selected:_tab==index,label:Row(mainAxisSize:MainAxisSize.min,children:[Icon(icon,size:16),const SizedBox(width:6),Text(name)]),onSelected:(_)=>setState(()=>_tab=index),selectedColor:_accent,backgroundColor:const Color(0xFF282A34)));
   Widget _canvas()=>Container(color:const Color(0xFF08090D),child:LayoutBuilder(builder:(context,c)=>GestureDetector(
@@ -465,7 +478,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         _maskStrokes..clear()..addAll(remaining);
       });
     }else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
-    child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
+    child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[const Text('TIMELINE',style:TextStyle(fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1)),const Spacer(),Text('${(_time/1000).toStringAsFixed(2)}s',style:const TextStyle(color:Colors.white60,fontSize:11)),IconButton(onPressed:_addKey,icon:const Icon(Icons.add_box_outlined,size:19),tooltip:'Add keyframe'),IconButton(onPressed:_togglePlayback,icon:Icon(_playing?Icons.pause:Icons.play_arrow,size:20))]),
@@ -495,8 +508,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
 }
 
 class _RigPainter extends CustomPainter {
-  final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks,liquify; final List<MangaCutEffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
-  _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength,this.sourceImage,this.time,this.duration,this.effects);
+  final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks,liquify; final List<_WeightStroke> weights; final List<MangaCutEffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
+  _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.weights,this.tab,this.brush,this.strength,this.sourceImage,this.time,this.duration,this.effects);
   void paintComposite(Canvas canvas,Size size){
     if(sourceImage==null)return;
     canvas.save();
@@ -560,8 +573,12 @@ class _RigPainter extends CustomPainter {
     canvas.scale(scale,scale);
     canvas.translate(-center.dx,-center.dy);
   }
+  double _paintedWeight(String boneId,Offset point,Size size){
+    var result=0.0;
+    for(final stroke in weights){if(stroke.boneId!=boneId||stroke.points.isEmpty)continue;final radius=stroke.radius*math.min(size.width,size.height);for(var i=0;i<math.max(1,stroke.points.length-1);i++){final a=Offset(stroke.points[i].dx*size.width,stroke.points[i].dy*size.height);final b=stroke.points.length==1?a:Offset(stroke.points[i+1].dx*size.width,stroke.points[i+1].dy*size.height);final ab=b-a;final denom=ab.dx*ab.dx+ab.dy*ab.dy;final t=denom==0?0.0:(((point-a).dx*ab.dx+(point-a).dy*ab.dy)/denom).clamp(0.0,1.0).toDouble();final distance=(point-(a+ab*t)).distance;if(distance<radius){final falloff=1-distance/radius;result=math.max(result,stroke.value*falloff*falloff*(3-2*falloff));}}}
+    return result.clamp(0.0,1.0).toDouble();
+  }
   Offset _deformByBones(Offset point,Size size){
-    final radius=math.max(24.0,math.min(size.width,size.height)*.22);
     for(var i=0;i<bones.length;i++){
       final bone=bones[i];
       if(bone.rotation.abs()<.0001)continue;
@@ -581,9 +598,13 @@ class _RigPainter extends CustomPainter {
       if(distance>=radius)continue;
       final influence=1-distance/radius;
       final weight=influence*influence*(3-2*influence);
-      final angle=bone.rotation*weight;
+      final painted=_paintedWeight(bone.id,point,size);
+      final influenceWeight=weights.any((stroke)=>stroke.boneId==bone.id)?painted:weight;
+      if(influenceWeight<=0)continue;
+      final angle=bone.rotation*influenceWeight;
       final delta=point-a;
-      point=a+Offset(delta.dx*math.cos(angle)-delta.dy*math.sin(angle),delta.dx*math.sin(angle)+delta.dy*math.cos(angle));
+      final rotated=a+Offset(delta.dx*math.cos(angle)-delta.dy*math.sin(angle),delta.dx*math.sin(angle)+delta.dy*math.cos(angle));
+      point=Offset.lerp(point,rotated,influenceWeight)!;
     }
     return point;
   }
