@@ -128,14 +128,19 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       }
     }
     for(var i=0;i<count;i++)known[i]=mask[i]==0?1:0;
-    final queue=<int>[];
+    final queue=Uint32List(count);
+    var tail=0;
     for(var y=0;y<height;y++)for(var x=0;x<width;x++){
       final index=y*width+x;
       if(known[index]==0)continue;
-      if((x>0&&mask[index-1]==1)||(x+1<width&&mask[index+1]==1)||(y>0&&mask[index-width]==1)||(y+1<height&&mask[index+width]==1))queue.add(index);
+      if((x>0&&mask[index-1]==1)||(x+1<width&&mask[index+1]==1)||(y>0&&mask[index-width]==1)||(y+1<height&&mask[index+width]==1))queue[tail++]=index;
+    }
+    if(tail==0){
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('The mask covers the entire image; leave some surrounding pixels unmasked so the repair has source colours.')));
+      return;
     }
     var head=0;
-    while(head<queue.length){
+    while(head<tail){
       final index=queue[head++],x=index%width,y=index~/width;
       void fillNeighbor(int target){
         if(mask[target]==0||known[target]==1)return;
@@ -154,7 +159,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         final offset=target*4;
         pixels[offset]=(r/n).round();pixels[offset+1]=(g/n).round();pixels[offset+2]=(b/n).round();pixels[offset+3]=(a/n).round();
         known[target]=1;
-        queue.add(target);
+        queue[tail++]=target;
       }
       if(x>0)fillNeighbor(index-1);
       if(x+1<width)fillNeighbor(index+1);
