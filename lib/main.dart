@@ -3791,21 +3791,6 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       if (index < 0) continue;
                       final targetClips = entry.value;
                       _layers[index].mangaEffects = targetClips.map((clip)=>MangaCutEffectClip(clip.id,clip.name,clip.target,clip.start,clip.end,strength:clip.strength,keys:List<int>.of(clip.keys),strengthKeys:Map<double,double>.of(clip.strengthKeys))).toList();
-                      final clip = targetClips.last;
-                      final mappedName = switch (clip.name.toLowerCase()) {
-                        'pulse' || 'bounce' => 'Zoom Pulse',
-                        'bend' || 'oscillate' || 'wobble' || 'wind' || 'liquify' => 'Wave Warp',
-                        'swing' => 'Spin',
-                        'impact' => 'Flash',
-                        'drift' => 'Shake',
-                        'twitch' => 'Glitch',
-                        _ => clip.name,
-                      };
-                      final fxIndex = fxLibrary.indexWhere((effect) => effect.$1.toLowerCase() == mappedName.toLowerCase());
-                      if (fxIndex < 0) continue;
-                      _layers[index]
-                        ..fx = fxIndex
-                        ..fxStrength = clip.strength;
                     }
                   });
                   _saveProject();
