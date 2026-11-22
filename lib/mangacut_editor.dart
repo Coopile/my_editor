@@ -71,7 +71,7 @@ class MangaCutEffectClip {
     return parameters[name]??1;
   }
   Map<String,dynamic> toJson()=>{'parameters':parameters,'parameterKeys':parameterKeys.map((name,frames)=>MapEntry(name,frames.map((k,v)=>MapEntry(k.toString(),v)) )),'id':id,'name':name,'target':target,'start':start,'end':end,'strength':strength,'keys':keys,'strengthKeys':strengthKeys.map((k,v)=>MapEntry(k.toString(),v))};
-  factory MangaCutEffectClip.fromJson(Map<String,dynamic> j)=>MangaCutEffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>(),strengthKeys:(j['strengthKeys'] as Map? ?? {}).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())),parameters:(j['parameters'] as Map? ?? {}).map((k,v)=>MapEntry(k.toString(),(v as num).toDouble())),parameterKeys:(j['parameterKeys'] as Map? ?? {}).map((name,frames)=>MapEntry(name.toString(),(frames as Map).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())))));
+  factory MangaCutEffectClip.fromJson(Map<String,dynamic> j)=>MangaCutEffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>(),strengthKeys:(j['strengthKeys'] as Map? ?? {}).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())),parameters:(j['parameters'] as Map?)?.map((k,v)=>MapEntry(k.toString(),(v as num).toDouble()))??{'amplitude':1.0,'frequency':1.0,'phase':0.0,'angle':0.0,'scale':1.0},parameterKeys:(j['parameterKeys'] as Map? ?? {}).map((name,frames)=>MapEntry(name.toString(),(frames as Map).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())))));
 }
 
 class _WeightStroke {
@@ -624,11 +624,12 @@ class _RigPainter extends CustomPainter {
       final projection=lengthSquared==0?0.0:(((point-a).dx*segment.dx+(point-a).dy*segment.dy)/lengthSquared).clamp(0.0,1.0).toDouble();
       final nearest=a+segment*projection;
       final distance=(point-nearest).distance;
-      if(distance>=radius)continue;
+      final hasPaintedWeights=weights.any((stroke)=>stroke.boneId==bone.id);
+      if(!hasPaintedWeights&&distance>=radius)continue;
       final influence=1-distance/radius;
       final weight=influence*influence*(3-2*influence);
       final painted=_paintedWeight(bone.id,point,size);
-      final influenceWeight=weights.any((stroke)=>stroke.boneId==bone.id)?painted:weight;
+      final influenceWeight=hasPaintedWeights?painted:weight;
       if(influenceWeight<=0)continue;
       final angle=bone.rotation*influenceWeight;
       final delta=point-a;
