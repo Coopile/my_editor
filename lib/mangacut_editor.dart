@@ -508,7 +508,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         _maskStrokes..clear()..addAll(remaining);
       });
     }else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
-    onPanEnd:(d){if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?-1.0:1.0));_activeWeightStroke.clear();});_save();}},
+    onPanEnd:(d){if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?-_strength:_strength));_activeWeightStroke.clear();});_save();}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -532,6 +532,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       if(_selectedBone<0||_selectedBone>=_bones.length)const Text('Select or create a bone in Rigging first.',style:TextStyle(color:Colors.orangeAccent,fontSize:11)),
       SwitchListTile(value:_eraseWeight,onChanged:(v)=>setState(()=>_eraseWeight=v),title:const Text('Erase weights',style:TextStyle(fontSize:12))),
       _slider('Weight brush size',_brush,4,140,(v)=>setState(()=>_brush=v)),
+      _slider('Weight amount',_strength,0.05,1,(v)=>setState(()=>_strength=v)),
       TextButton.icon(onPressed:()=>setState(()=>_weightStrokes.removeWhere((stroke)=>_selectedBone>=0&&stroke.boneId==_bones[_selectedBone].id)),icon:const Icon(Icons.delete_outline),label:const Text('Clear selected bone weights')),
     ] else ...[
       const Text('Add an effect clip and choose which layer receives it.',style:TextStyle(fontSize:11,color:Colors.white60)),
@@ -629,6 +630,8 @@ class _RigPainter extends CustomPainter {
   }
   Offset _deformByBones(Offset point,Size size){
     final radius=math.max(24.0,math.min(size.width,size.height)*.22);
+    final original=point;
+    var accumulated=Offset.zero,totalWeight=0.0;
     for(var i=0;i<bones.length;i++){
       final bone=bones[i];
       if(bone.rotation.abs()<.0001)continue;
@@ -645,27 +648,29 @@ class _RigPainter extends CustomPainter {
       final restAngle=math.atan2(restVector.dy,restVector.dx);
       final currentAngle=math.atan2(currentVector.dy,currentVector.dx);
       final scale=currentLength/restLength;
-      final relative=point-restA;
+      final relative=original-restA;
       final localX=relative.dx*math.cos(restAngle)+relative.dy*math.sin(restAngle);
       final localY=-relative.dx*math.sin(restAngle)+relative.dy*math.cos(restAngle);
       final transformed=currentA+Offset(localX*scale*math.cos(currentAngle)-localY*scale*math.sin(currentAngle),localX*scale*math.sin(currentAngle)+localY*scale*math.cos(currentAngle));
       final hasPaintedWeights=weights.any((stroke)=>stroke.boneId==bone.id);
       double influenceWeight;
       if(hasPaintedWeights){
-        influenceWeight=_paintedWeight(bone.id,point,size);
+        influenceWeight=_paintedWeight(bone.id,original,size);
       }else{
         final segment=currentB-currentA;
         final lengthSquared=segment.dx*segment.dx+segment.dy*segment.dy;
-        final projection=lengthSquared==0?0.0:(((point-currentA).dx*segment.dx+(point-currentA).dy*segment.dy)/lengthSquared).clamp(0.0,1.0).toDouble();
+        final projection=lengthSquared==0?0.0:(((original-currentA).dx*segment.dx+(original-currentA).dy*segment.dy)/lengthSquared).clamp(0.0,1.0).toDouble();
         final nearest=currentA+segment*projection;
-        final distance=(point-nearest).distance;
+        final distance=(original-nearest).distance;
         if(distance>=radius)continue;
         final falloff=1-distance/radius;
         influenceWeight=falloff*falloff*(3-2*falloff);
       }
       if(influenceWeight<=0)continue;
-      point=Offset.lerp(point,transformed,influenceWeight)!;
+      accumulated+=transformed*influenceWeight;
+      totalWeight+=influenceWeight;
     }
+    if(totalWeight>1){point=accumulated/totalWeight;}else if(totalWeight>0){point=original*(1-totalWeight)+accumulated;}
     return point;
   }
   void _drawImageMesh(Canvas canvas,Size size,ui.Image image){
