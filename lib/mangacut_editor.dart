@@ -7,6 +7,7 @@ import 'dart:ui' as ui;
 import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:path_provider/path_provider.dart';
 
 class MangaCutEditor extends StatefulWidget {
   final String projectId;
@@ -53,6 +54,10 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   bool _playing=false, _maskErase=false;
   Timer? _playTimer;
   int _dragBoneEnd=0;
+  String _timelineDragKind='';
+  int _timelineDragIndex=-1;
+  int _timelineDragKey=-1;
+  double _timelineDragOffset=0;
   String get _storageKey=>'mangacut.workspace.${widget.projectId}';
 
   @override
@@ -83,7 +88,49 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   double _rotationAt(_RigBone bone,int time){final frames=bone.rotationKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));if(frames.isEmpty)return bone.rotation;if(time<=frames.first.key)return frames.first.value;if(time>=frames.last.key)return frames.last.value;for(var i=1;i<frames.length;i++){if(time<=frames[i].key){final a=frames[i-1],b=frames[i];final t=(time-a.key)/(b.key-a.key);return a.value+(b.value-a.value)*t;}}return bone.rotation;}
   void _togglePlayback(){if(_playing){_playTimer?.cancel();_playTimer=null;setState(()=>_playing=false);_save();return;}if(_time>=_duration)_time=0;setState(()=>_playing=true);_playTimer=Timer.periodic(const Duration(milliseconds:16),(timer){if(!mounted){timer.cancel();return;}final next=_time+16;if(next>=_duration){_time=_duration;timer.cancel();_playTimer=null;_playing=false;}else{_time=next;}for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}setState((){});});}
   @override void dispose(){_playTimer?.cancel();_sourceImage?.dispose();super.dispose();}
-  void _timelineTap(Offset p,double width){setState(()=>_time=(p.dx/width*_duration).round().clamp(0,_duration).toInt());}
+  double _timelineTimeAt(double x,double width)=>((x/width).clamp(0.0,1.0)*_duration).toDouble();
+  void _timelinePanStart(Offset p,Size size){
+    final row=math.max(22.0,size.height/(_bones.length+_effects.length+1)).toDouble();
+    final rowIndex=(p.dy/row).floor();
+    _timelineDragKind='';_timelineDragIndex=-1;_timelineDragKey=-1;
+    if(rowIndex>=0&&rowIndex<_bones.length){
+      final bone=_bones[rowIndex];
+      final keys=bone.rotationKeys.isEmpty?bone.keys:bone.rotationKeys.keys.toList();
+      for(final key in keys){
+        final keyX=key/_duration*size.width;
+        if((p.dx-keyX).abs()<13){_timelineDragKind='boneKey';_timelineDragIndex=rowIndex;_timelineDragKey=key;_selectedBone=rowIndex;break;}
+      }
+    }else if(rowIndex>=_bones.length&&rowIndex<_bones.length+_effects.length){
+      final index=rowIndex-_bones.length;final effect=_effects[index];
+      final left=effect.start*size.width,right=effect.end*size.width;
+      if((p.dx-left).abs()<12){_timelineDragKind='effectStart';_timelineDragIndex=index;}
+      else if((p.dx-right).abs()<12){_timelineDragKind='effectEnd';_timelineDragIndex=index;}
+      else if(p.dx>=left&&p.dx<=right){_timelineDragKind='effectMove';_timelineDragIndex=index;_timelineDragOffset=p.dx-left;}
+    }
+    if(_timelineDragKind.isEmpty){_timelineDragKind='scrub';_time=_timelineTimeAt(p.dx,size.width).round();}
+    setState((){});
+  }
+  void _timelinePanUpdate(Offset p,Size size){
+    final t=_timelineTimeAt(p.dx,size.width).round().clamp(0,_duration);
+    setState((){
+      if(_timelineDragKind=='boneKey'&&_timelineDragIndex>=0&&_timelineDragIndex<_bones.length){
+        final bone=_bones[_timelineDragIndex];final old=_timelineDragKey;
+        if(bone.rotationKeys.containsKey(old)){final value=bone.rotationKeys.remove(old)!;bone.rotationKeys[t]=value;}
+        final at=bone.keys.indexOf(old);if(at>=0)bone.keys[at]=t;
+        bone.keys.sort();_timelineDragKey=t;
+      }else if(_timelineDragIndex>=0&&_timelineDragIndex<_effects.length){
+        final effect=_effects[_timelineDragIndex];final normalized=(t/_duration).clamp(0.0,1.0);
+        if(_timelineDragKind=='effectStart')effect.start=normalized.clamp(0.0,effect.end-.01).toDouble();
+        if(_timelineDragKind=='effectEnd')effect.end=normalized.clamp(effect.start+.01,1.0).toDouble();
+        if(_timelineDragKind=='effectMove'){
+          final width=(effect.end-effect.start);final start=((p.dx-_timelineDragOffset)/size.width).clamp(0.0,1.0-width).toDouble();
+          effect.start=start;effect.end=start+width;
+        }
+      }else if(_timelineDragKind=='scrub'){_time=t;}
+    });
+    _save();
+  }
+  void _timelinePanEnd(){_timelineDragKind='';_timelineDragIndex=-1;_timelineDragKey=-1;_save();}
   @override
   Widget build(BuildContext context){
     return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace')]),
@@ -115,7 +162,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[const Text('TIMELINE',style:TextStyle(fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1)),const Spacer(),Text('${(_time/1000).toStringAsFixed(2)}s',style:const TextStyle(color:Colors.white60,fontSize:11)),IconButton(onPressed:_addKey,icon:const Icon(Icons.add_box_outlined,size:19),tooltip:'Add keyframe'),IconButton(onPressed:_togglePlayback,icon:Icon(_playing?Icons.pause:Icons.play_arrow,size:20))]),
-    Expanded(child:LayoutBuilder(builder:(context,c)=>GestureDetector(onTapDown:(d)=>_timelineTap(d.localPosition,c.maxWidth),onHorizontalDragUpdate:(d)=>_timelineTap(d.localPosition,c.maxWidth),child:CustomPaint(size:Size.infinite,painter:_StudioTimelinePainter(_bones,_effects,_time,_duration))))),
+    Expanded(child:LayoutBuilder(builder:(context,c)=>GestureDetector(onPanStart:(d)=>_timelinePanStart(d.localPosition,Size(c.maxWidth,c.maxHeight)),onPanUpdate:(d)=>_timelinePanUpdate(d.localPosition,Size(c.maxWidth,c.maxHeight)),onPanEnd:(_)=>_timelinePanEnd(),child:CustomPaint(size:Size.infinite,painter:_StudioTimelinePainter(_bones,_effects,_time,_duration))))),
   ]));
   Widget _inspector()=>Container(color:_panel,padding:const EdgeInsets.all(12),child:SingleChildScrollView(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[const Expanded(child:Text('WORKSPACE TOOLS',style:TextStyle(fontWeight:FontWeight.w900,fontSize:11,letterSpacing:1))),IconButton(onPressed:_pickSourceImage,icon:const Icon(Icons.add_photo_alternate_outlined,size:18),tooltip:'Import image'),IconButton(onPressed:_save,icon:const Icon(Icons.save,size:18))]),
@@ -149,10 +196,20 @@ class _RigPainter extends CustomPainter {
     for(double x=0;x<s.width;x+=24)c.drawLine(Offset(x,0),Offset(x,s.height),grid);
     for(double y=0;y<s.height;y+=24)c.drawLine(Offset(0,y),Offset(s.width,y),grid);
     final center=Offset(s.width*.5,s.height*.5);
-    if(sourceImage!=null){_drawImageMesh(c,s,sourceImage!);} else {
-    c.drawOval(Rect.fromCenter(center:center,width:s.width*.28,height:s.height*.48),Paint()..color=const Color(0xFF29364A));
-    c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B)); }
-    for(final stroke in masks){final p=Paint()..color=Colors.white.withOpacity(.8)..strokeWidth=brush..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
+    if(sourceImage!=null){
+      c.saveLayer(Offset.zero & s,Paint());
+      _drawImageMesh(c,s,sourceImage!);
+      final erase=Paint()..blendMode=BlendMode.dstOut..style=PaintingStyle.stroke..strokeCap=StrokeCap.round..strokeJoin=StrokeJoin.round..strokeWidth=brush;
+      for(final stroke in masks){
+        if(stroke.length==1){c.drawCircle(Offset(stroke.first.dx*s.width,stroke.first.dy*s.height),brush/2,Paint()..blendMode=BlendMode.dstOut);}
+        for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),erase);
+      }
+      c.restore();
+    } else {
+      c.drawOval(Rect.fromCenter(center:center,width:s.width*.28,height:s.height*.48),Paint()..color=const Color(0xFF29364A));
+      c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B));
+      for(final stroke in masks){final p=Paint()..color=Colors.white.withOpacity(.8)..strokeWidth=brush..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
+    }
     for(final stroke in liquify){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.8)..strokeWidth=2..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
     for(int i=0;i<bones.length;i++){final b=bones[i];final localA=Offset(b.a.dx*s.width,b.a.dy*s.height),localB=Offset(b.b.dx*s.width,b.b.dy*s.height);final rotatedB=localA+Offset((localB-localA).dx*math.cos(b.rotation)-(localB-localA).dy*math.sin(b.rotation),(localB-localA).dx*math.sin(b.rotation)+(localB-localA).dy*math.cos(b.rotation));final a=_applyParentTransforms(i,localA),z=_applyParentTransforms(i,rotatedB);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
