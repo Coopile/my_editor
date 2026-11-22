@@ -92,8 +92,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     final mask=Uint8List(count),known=Uint8List(count);
     final radius=math.max(1.0,_brush*math.min(width,height)/500.0);
     void markDisk(double cx,double cy){
-      final left=math.max(0,(cx-radius).floor()),right=math.min(width-1,(cx+radius).ceil());
-      final top=math.max(0,(cy-radius).floor()),bottom=math.min(height-1,(cy+radius).ceil());
+      final left=math.max(0,(cx-radius).floor()).toInt(),right=math.min(width-1,(cx+radius).ceil()).toInt();
+      final top=math.max(0,(cy-radius).floor()).toInt(),bottom=math.min(height-1,(cy+radius).ceil()).toInt();
       for(var y=top;y<=bottom;y++)for(var x=left;x<=right;x++){
         final dx=x-cx,dy=y-cy;
         if(dx*dx+dy*dy<=radius*radius)mask[y*width+x]=1;
@@ -105,7 +105,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         final a=stroke[i-1],b=stroke[i];
         final ax=a.dx*width,ay=a.dy*height,bx=b.dx*width,by=b.dy*height;
         final distance=math.sqrt((bx-ax)*(bx-ax)+(by-ay)*(by-ay));
-        final steps=math.max(1,(distance/(radius*.4)).ceil());
+        final steps=math.max(1,(distance/(radius*.4)).ceil()).toInt();
         for(var step=0;step<=steps;step++){
           final t=step/steps;markDisk(ax+(bx-ax)*t,ay+(by-ay)*t);
         }
@@ -273,7 +273,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     setState((){});
   }
   void _timelinePanUpdate(Offset p,Size size){
-    final t=_timelineTimeAt(p.dx,size.width).round().clamp(0,_duration);
+    final t=_timelineTimeAt(p.dx,size.width).round().clamp(0,_duration).toInt();
     setState((){
       if(_timelineDragKind=='boneKey'&&_timelineDragIndex>=0&&_timelineDragIndex<_bones.length){
         final bone=_bones[_timelineDragIndex];final old=_timelineDragKey;
@@ -453,7 +453,7 @@ class _RigPainter extends CustomPainter {
       final b=_applyParentTransforms(i,rotatedB,size);
       final segment=b-a;
       final lengthSquared=segment.dx*segment.dx+segment.dy*segment.dy;
-      final projection=lengthSquared==0?0.0:(((point-a).dx*segment.dx+(point-a).dy*segment.dy)/lengthSquared).clamp(0.0,1.0);
+      final projection=lengthSquared==0?0.0:(((point-a).dx*segment.dx+(point-a).dy*segment.dy)/lengthSquared).clamp(0.0,1.0).toDouble();
       final nearest=a+segment*projection;
       final distance=(point-nearest).distance;
       if(distance>=radius)continue;
