@@ -2226,6 +2226,34 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       speed: l.fxSpeed,
       time: _ms / 1000,
     );
+    final projectSeconds = math.max(.001, _videoDuration);
+    for (final clip in l.mangaEffects) {
+      final clipStart = clip.start * projectSeconds;
+      final clipEnd = clip.end * projectSeconds;
+      final currentSeconds = _ms / 1000;
+      if (currentSeconds < clipStart || currentSeconds > clipEnd) continue;
+      final mappedName = switch (clip.name.toLowerCase()) {
+        'pulse' || 'bounce' => 'Zoom Pulse',
+        'bend' || 'oscillate' || 'wobble' || 'wind' || 'liquify' => 'Wave Warp',
+        'swing' => 'Spin',
+        'impact' => 'Flash',
+        'drift' => 'Shake',
+        'twitch' => 'Glitch',
+        _ => clip.name,
+      };
+      final clipFx = fxLibrary.indexWhere(
+        (effect) => effect.$1.toLowerCase() == mappedName.toLowerCase(),
+      );
+      if (clipFx >= 0) {
+        child = applyFx(
+          clipFx,
+          child,
+          strength: clip.strength,
+          speed: 1,
+          time: _ms / 1000,
+        );
+      }
+    }
     if (sel && _pivotMode) {
       child = Stack(children: [
         child,
