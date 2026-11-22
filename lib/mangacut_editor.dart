@@ -585,8 +585,22 @@ class _RigPainter extends CustomPainter {
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
   }
   Offset _applyParentTransforms(int index,Offset point,Size size){
-    final visited=<int>{};var parentId=bones[index].parent;
-    while(parentId.isNotEmpty){final parentIndex=bones.indexWhere((bone)=>bone.id==parentId);if(parentIndex<0||!visited.add(parentIndex))break;final parent=bones[parentIndex];final pivot=Offset(parent.a.dx*size.width,parent.a.dy*size.height);final dx=point.dx-pivot.dx,dy=point.dy-pivot.dy;point=pivot+Offset(dx*math.cos(parent.rotation)-dy*math.sin(parent.rotation),dx*math.sin(parent.rotation)+dy*math.cos(parent.rotation));parentId=parent.parent;}
+    // Apply each ancestor in bind-pose space. Using the rest pivot as the
+    // source and the animated pivot as the destination preserves parent
+    // translation as well as rotation for child joints and mesh vertices.
+    final visited=<int>{};
+    var parentId=bones[index].parent;
+    while(parentId.isNotEmpty){
+      final parentIndex=bones.indexWhere((bone)=>bone.id==parentId);
+      if(parentIndex<0||!visited.add(parentIndex))break;
+      final parent=bones[parentIndex];
+      final restPivot=Offset(parent.restA.dx*size.width,parent.restA.dy*size.height);
+      final currentPivot=Offset(parent.a.dx*size.width,parent.a.dy*size.height);
+      final dx=point.dx-restPivot.dx,dy=point.dy-restPivot.dy;
+      final cosine=math.cos(parent.rotation),sine=math.sin(parent.rotation);
+      point=currentPivot+Offset(dx*cosine-dy*sine,dx*sine+dy*cosine);
+      parentId=parent.parent;
+    }
     return point;
   }
   double _effectStrength(String name){
