@@ -224,7 +224,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         _applyPoseAt(frameTime);
         final recorder=ui.PictureRecorder();
         final canvas=Canvas(recorder);
-        final painter=_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush*width/500.0,_strength,image,frameTime,_duration,_effects);
+        final painter=_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush*width/500.0,_strength,image,frameTime,_duration,_effects);
         painter.paintComposite(canvas,outputSize);
         final picture=recorder.endRecording();
         final rendered=await picture.toImage(width,height);
@@ -265,7 +265,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     final recorder=ui.PictureRecorder();
     final canvas=Canvas(recorder);
     final outputSize=Size(image.width.toDouble(),image.height.toDouble());
-    final painter=_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush*image.width/500.0,_strength,image,_time,_duration,_effects);
+    final painter=_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush*image.width/500.0,_strength,image,_time,_duration,_effects);
     painter.paintComposite(canvas,outputSize);
     final picture=recorder.endRecording();
     final rendered=await picture.toImage(image.width,image.height);
