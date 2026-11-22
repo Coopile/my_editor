@@ -66,7 +66,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
   void _addEffect(String name){final e=_EffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
   void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();}_changed();}
-  void _timelineTap(Offset p,double width){setState(()=>_time=(p.dx/width*_duration).round().clamp(0,_duration));}
+  void _timelineTap(Offset p,double width){setState(()=>_time=(p.dx/width*_duration).round().clamp(0,_duration).toInt());}
   @override
   Widget build(BuildContext context){
     return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace')]),
@@ -120,14 +120,14 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       if(_selectedEffect>=0&&_selectedEffect<_effects.length)_slider('Effect strength',_effects[_selectedEffect].strength,0,2,(v){_effects[_selectedEffect].strength=v;_changed();}),
     ],
   ])));
-  Widget _slider(String title,double value,double min,double max,ValueChanged<double> change)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('$title  ${value.toStringAsFixed(2)}',style:const TextStyle(fontSize:11,color:Colors.white70)),Slider(value:value.clamp(min,max),min:min,max:max,onChanged:change,activeColor:_accent)]);
+  Widget _slider(String title,double value,double min,double max,ValueChanged<double> change)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('$title  ${value.toStringAsFixed(2)}',style:const TextStyle(fontSize:11,color:Colors.white70)),Slider(value:value.clamp(min,max).toDouble(),min:min,max:max,onChanged:change,activeColor:_accent)]);
 }
 
 class _RigPainter extends CustomPainter {
   final List<_RigBone> bones; final int selected,tab; final List<List<Offset>> masks,liquify; final double brush,strength;
   _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength);
   @override void paint(Canvas c,Size s){
-    final bg=Paint()..color=const Color(0xFF171A22);c.drawRect(Offset.zero&s,bg);
+    final bg=Paint()..color=const Color(0xFF171A22);c.drawRect(Offset.zero & s,bg);
     final grid=Paint()..color=Colors.white.withOpacity(.045)..strokeWidth=1;
     for(double x=0;x<s.width;x+=24)c.drawLine(Offset(x,0),Offset(x,s.height),grid);
     for(double y=0;y<s.height;y+=24)c.drawLine(Offset(0,y),Offset(s.width,y),grid);
@@ -145,11 +145,11 @@ class _StudioTimelinePainter extends CustomPainter{
   final List<_RigBone> bones;final List<_EffectClip> effects;final int time,duration;
   _StudioTimelinePainter(this.bones,this.effects,this.time,this.duration);
   @override void paint(Canvas c,Size s){
-    final row=math.max(22.0,s.height/(bones.length+effects.length+1));final line=Paint()..color=Colors.white12;
+    final row=math.max(22.0,s.height/(bones.length+effects.length+1)).toDouble();final line=Paint()..color=Colors.white12;
     for(int i=0;i<bones.length+effects.length+1;i++)c.drawLine(Offset(0,row*i),Offset(s.width,row*i),line);
-    var r=0;for(final b in bones){final y=row*(r+.5);c.drawTextMarker(Offset(4,y-6),b.name,Colors.white70);for(final k in b.keys){final x=k/duration*s.width;c.drawCircle(Offset(x,y),4,Paint()..color=const Color(0xFFFFD76A));}r++;}
-    for(final e in effects){final y=row*(r+.5),x=e.start*s.width,w=(e.end-e.start)*s.width;c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x,y-8,w.clamp(0.0,s.width),16),const Radius.circular(3)),Paint()..color=const Color(0xFF7655E8));for(final k in e.keys)c.drawCircle(Offset(k/duration*s.width,y),3,Paint()..color=Colors.white);r++;}
-    final x=time/duration*s.width;c.drawLine(Offset(x,0),Offset(x,s.height),Paint()..color=Colors.white..strokeWidth=2);
+    var r=0;for(final b in bones){final y=row*(r+.5);c.drawTextMarker(Offset(4,y-6),b.name,Colors.white70);for(final k in b.keys){final x=k/duration*s.width;c.drawCircle(Offset(x.toDouble(),y),4,Paint()..color=const Color(0xFFFFD76A));}r++;}
+    for(final e in effects){final y=row*(r+.5),x=e.start*s.width,w=(e.end-e.start)*s.width;c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x.toDouble(),y-8,w.clamp(0.0,s.width).toDouble(),16),const Radius.circular(3)),Paint()..color=const Color(0xFF7655E8));for(final k in e.keys)c.drawCircle(Offset(k/duration*s.width,y),3,Paint()..color=Colors.white);r++;}
+    final x=time/duration*s.width;c.drawLine(Offset(x.toDouble(),0),Offset(x.toDouble(),s.height),Paint()..color=Colors.white..strokeWidth=2);
   }
   @override bool shouldRepaint(covariant _StudioTimelinePainter old)=>true;
 }
