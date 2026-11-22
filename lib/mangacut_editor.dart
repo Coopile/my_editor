@@ -363,6 +363,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     var amount=bone.overshootKeys[segment]??.18;
     var handle1=bone.curveHandle1Keys[segment]??const Offset(.42,0);
     var handle2=bone.curveHandle2Keys[segment]??const Offset(.58,1);
+    var draggingHandle=1;
     await showDialog<void>(context:context,builder:(dialogContext)=>StatefulBuilder(builder:(context,setDialogState)=>AlertDialog(
       backgroundColor:_panel,
       title:Text('Motion curve · ${bone.name}'),
@@ -373,7 +374,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
           const SizedBox(height:8),
           const Text('Drag either control point on the graph to shape the curve.',style:TextStyle(fontSize:11,color:Colors.white60)),
         ],
-        const SizedBox(height:12),SizedBox(height:150,width:320,child:GestureDetector(onPanDown:(d){if(mode!='Custom')return;final p=Offset((d.localPosition.dx/320).clamp(0.0,1.0),(1-d.localPosition.dy/150).clamp(0.0,1.0));setDialogState((){if((p-handle1).distance<(p-handle2).distance){handle1=p;}else{handle2=p;}});},onPanUpdate:(d){if(mode!='Custom')return;final p=Offset((d.localPosition.dx/320).clamp(0.0,1.0),(1-d.localPosition.dy/150).clamp(0.0,1.0));setDialogState((){if((p-handle1).distance<(p-handle2).distance){handle1=p;}else{handle2=p;}});},child:CustomPaint(painter:_CurvePreviewPainter(mode,amount,handle1,handle2)))),
+        const SizedBox(height:12),SizedBox(height:150,width:320,child:GestureDetector(onPanDown:(d){if(mode!='Custom')return;final p=Offset((d.localPosition.dx/320).clamp(0.0,1.0),(1-d.localPosition.dy/150).clamp(0.0,1.0));draggingHandle=(p-handle1).distance<(p-handle2).distance?1:2;setDialogState((){if(draggingHandle==1){handle1=p;}else{handle2=p;}});},onPanUpdate:(d){if(mode!='Custom')return;final p=Offset((d.localPosition.dx/320).clamp(0.0,1.0),(1-d.localPosition.dy/150).clamp(0.0,1.0));setDialogState((){if(draggingHandle==1){handle1=p;}else{handle2=p;}});},child:CustomPaint(painter:_CurvePreviewPainter(mode,amount,handle1,handle2)))),
       ])),
       actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Cancel')),FilledButton(onPressed:(){bone.easingKeys[segment]=mode;bone.overshootKeys[segment]=amount;bone.curveHandle1Keys[segment]=handle1;bone.curveHandle2Keys[segment]=handle2;_changed();Navigator.pop(dialogContext);},child:const Text('Apply curve'))],
     )));
@@ -680,6 +681,12 @@ class _CurvePreviewPainter extends CustomPainter {
       if(i==0)path.moveTo(point.dx,point.dy);else path.lineTo(point.dx,point.dy);
     }
     canvas.drawPath(path,Paint()..color=const Color(0xFF8A68FF)..style=PaintingStyle.stroke..strokeWidth=3);
+    if(mode=='Custom'){
+      final p1=Offset(handle1.dx*size.width,(1-handle1.dy)*size.height),p2=Offset(handle2.dx*size.width,(1-handle2.dy)*size.height);
+      final guides=Paint()..color=Colors.white54..strokeWidth=1;
+      canvas.drawLine(Offset(0,size.height),p1,guides);canvas.drawLine(Offset(size.width,0),p2,guides);
+      canvas.drawCircle(p1,7,Paint()..color=const Color(0xFFFFD76A));canvas.drawCircle(p2,7,Paint()..color=const Color(0xFF71D8FF));
+    }
   }
   @override bool shouldRepaint(covariant _CurvePreviewPainter old)=>old.mode!=mode||old.overshoot!=overshoot||old.handle1!=handle1||old.handle2!=handle2;
 }
