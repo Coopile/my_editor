@@ -495,6 +495,7 @@ class Layer {
   List<Offset> mesh = defaultMesh();
   List<KF> kfs = [];
   List<EffectKF> effectKfs = [];
+  List<MangaCutEffectClip> mangaEffects = [];
   double curveEase = .65;
   Offset curveHandle1 = const Offset(.42, 0);
   Offset curveHandle2 = const Offset(.58, 1);
@@ -539,7 +540,8 @@ class Layer {
       ..groupId = groupId
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList()
-      ..effectKfs = effectKfs.map((k) => EffectKF(k.t, k.strength, k.speed)).toList();
+      ..effectKfs = effectKfs.map((k) => EffectKF(k.t, k.strength, k.speed)).toList()
+      ..mangaEffects = mangaEffects.map((e) => MangaCutEffectClip(e.id,e.name,e.target,e.start,e.end,strength:e.strength,keys:List<int>.of(e.keys))).toList();
     return clone;
   }
 
@@ -902,6 +904,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     'rot': layer.rot, 'opacity': layer.opacity, 'fontSize': layer.fontSize,
     'start': layer.start, 'end': layer.end, 'bend': layer.bend,
     'fxStrength': layer.fxStrength, 'fxSpeed': layer.fxSpeed,
+    'mangaEffects': layer.mangaEffects.map((e)=>e.toJson()).toList(),
     'pivot': [layer.pivot.dx, layer.pivot.dy], 'fx': layer.fx,
     'color': layer.color.value, 'bold': layer.bold, 'italic': layer.italic,
     'flipX': layer.flipX, 'flipY': layer.flipY, 'shadow': layer.shadow,
@@ -945,6 +948,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       ..bend = (data['bend'] as num? ?? 0).toDouble()
       ..fxStrength = (data['fxStrength'] as num? ?? 1).toDouble()
       ..fxSpeed = (data['fxSpeed'] as num? ?? 1).toDouble()
+      ..mangaEffects = (data['mangaEffects'] as List? ?? []).map((e)=>MangaCutEffectClip.fromJson(Map<String,dynamic>.from(e))).toList()
       ..pivot = Offset((pivot[0] as num).toDouble(), (pivot[1] as num).toDouble())
       ..fx = (data['fx'] as num? ?? 0).toInt().clamp(0, fxLibrary.length - 1).toInt()
       ..color = Color((data['color'] as num? ?? Colors.white.value).toInt())
@@ -1793,6 +1797,35 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     }
   }
 
+  String? _exportMangaClipFilter(MangaCutEffectClip clip,double totalDuration){
+    final start=(clip.start*totalDuration).clamp(0.0,totalDuration).toStringAsFixed(3);
+    final end=(clip.end*totalDuration).clamp(0.0,totalDuration).toStringAsFixed(3);
+    if(double.parse(end)<=double.parse(start))return null;
+    final strength=clip.strength.clamp(0.0,2.0).toDouble();
+    final enable=":enable='between(t,$start,$end)'";
+    switch(clip.name.toLowerCase()){
+      case 'shake':
+      case 'drift':
+      case 'twitch':
+        return "rgbashift=rh='sin(t*42)*${(5*strength).toStringAsFixed(2)}':bh='-sin(t*37)*${(5*strength).toStringAsFixed(2)}'$enable";
+      case 'pulse':
+      case 'bounce':
+        return "eq=brightness='0.025*sin(t*5)*$strength'$enable";
+      case 'spin':
+      case 'swing':
+      case 'wobble':
+        return "rotate='0.04*sin(t*4)*$strength':c=none$enable";
+      case 'impact':
+        return "eq=brightness='if(lt(mod(t,0.5),0.08),${(0.5*strength).toStringAsFixed(3)},0)'$enable";
+      case 'bend':
+      case 'wind':
+      case 'liquify':
+      case 'oscillate':
+        return "geq=lum='lum(X+sin(Y/80+T*2)*${(8*strength).toStringAsFixed(2)},Y)':cb='cb(X+sin(Y/80+T*2)*${(8*strength).toStringAsFixed(2)},Y)':cr='cr(X+sin(Y/80+T*2)*${(8*strength).toStringAsFixed(2)},Y)'$enable";
+      default:return null;
+    }
+  }
+
   String? _exportLayerFilter(Layer layer) {
     final name = fxLibrary[layer.fx].$1;
     final strength = layer.fxStrength.clamp(0.0, 2.0).toDouble();
@@ -1949,6 +1982,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         final layerEffect = _exportLayerFilter(layer);
         if (layerEffect != null && layerEffect.isNotEmpty) {
           photoFilters.add(layerEffect);
+        }
+        for(final clip in layer.mangaEffects){
+          final clipFilter=_exportMangaClipFilter(clip,totalDuration);
+          if(clipFilter!=null&&clipFilter.isNotEmpty)photoFilters.add(clipFilter);
         }
         if (layer.rot.abs() > .001) {
           photoFilters.add('rotate=' + layer.rot.toStringAsFixed(4) + ':ow=rotw(iw):oh=roth(ih):c=none');
@@ -3682,14 +3719,16 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 onApplyEffects: (clips) {
                   if (!mounted) return;
                   setState(() {
-                    final latestByTarget = <String, MangaCutEffectClip>{};
+                    final byTarget = <String,List<MangaCutEffectClip>>{};
                     for (final clip in clips) {
-                      latestByTarget[clip.target] = clip;
+                      byTarget.putIfAbsent(clip.target,()=>[]).add(clip);
                     }
-                    for (final entry in latestByTarget.entries) {
+                    for (final entry in byTarget.entries) {
                       final index = _layers.indexWhere((layer) => layer.text == entry.key);
                       if (index < 0) continue;
-                      final clip = entry.value;
+                      final targetClips = entry.value;
+                      _layers[index].mangaEffects = targetClips.map((clip)=>MangaCutEffectClip(clip.id,clip.name,clip.target,clip.start,clip.end,strength:clip.strength,keys:List<int>.of(clip.keys))).toList();
+                      final clip = targetClips.last;
                       final mappedName = switch (clip.name.toLowerCase()) {
                         'pulse' || 'bounce' => 'Zoom Pulse',
                         'bend' || 'oscillate' || 'wobble' || 'wind' || 'liquify' => 'Wave Warp',
