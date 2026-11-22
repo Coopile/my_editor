@@ -579,7 +579,7 @@ class _RigPainter extends CustomPainter {
       for(final stroke in masks){final p=Paint()..color=Colors.white.withOpacity(.8)..strokeWidth=brush..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
     }
     for(final stroke in liquify){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.8)..strokeWidth=2..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
-    if(tab==5){for(final stroke in weights){final boneIndex=bones.indexWhere((b)=>b.id==stroke.boneId);if(boneIndex<0)continue;final p=Paint()..color=Colors.orange.withOpacity(.18+.55*stroke.value)..strokeWidth=math.max(4.0,stroke.radius*math.min(s.width,s.height)*2)..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(var i=1;i<stroke.points.length;i++){c.drawLine(Offset(stroke.points[i-1].dx*s.width,stroke.points[i-1].dy*s.height),Offset(stroke.points[i].dx*s.width,stroke.points[i].dy*s.height),p);}}}
+    if(tab==5){for(final stroke in weights){final boneIndex=bones.indexWhere((b)=>b.id==stroke.boneId);if(boneIndex<0)continue;final p=Paint()..color=(stroke.value<0?Colors.redAccent:Colors.orange).withOpacity(.62)..strokeWidth=math.max(4.0,stroke.radius*math.min(s.width,s.height)*2)..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(var i=1;i<stroke.points.length;i++){c.drawLine(Offset(stroke.points[i-1].dx*s.width,stroke.points[i-1].dy*s.height),Offset(stroke.points[i].dx*s.width,stroke.points[i].dy*s.height),p);}}}
     for(int i=0;i<bones.length;i++){final b=bones[i];final localA=Offset(b.a.dx*s.width,b.a.dy*s.height),localB=Offset(b.b.dx*s.width,b.b.dy*s.height);final rotatedB=localA+Offset((localB-localA).dx*math.cos(b.rotation)-(localB-localA).dy*math.sin(b.rotation),(localB-localA).dx*math.sin(b.rotation)+(localB-localA).dy*math.cos(b.rotation));final a=_applyParentTransforms(i,localA,s),z=_applyParentTransforms(i,rotatedB,s);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
   }
@@ -644,7 +644,6 @@ class _RigPainter extends CustomPainter {
       if(restLength<.001)continue;
       final restAngle=math.atan2(restVector.dy,restVector.dx);
       final currentAngle=math.atan2(currentVector.dy,currentVector.dx);
-      final angleDelta=currentAngle-restAngle;
       final scale=currentLength/restLength;
       final relative=point-restA;
       final localX=relative.dx*math.cos(restAngle)+relative.dy*math.sin(restAngle);
