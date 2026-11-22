@@ -1797,9 +1797,19 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     }
   }
 
+  String _mangaClipParameterExpression(MangaCutEffectClip clip,String parameter,double totalDuration,double trimStart){
+    final frames=clip.parameterKeys[parameter]?.entries.toList()??<MapEntry<double,double>>[];
+    frames.sort((a,b)=>a.key.compareTo(b.key));
+    if(frames.isEmpty)return (clip.parameters[parameter]??1).toStringAsFixed(4);
+    final timeExpr='((t+${trimStart.toStringAsFixed(4)})/${math.max(.001,totalDuration).toStringAsFixed(4)})';
+    var expression=frames.last.value.toStringAsFixed(4);
+    for(var i=frames.length-2;i>=0;i--){final a=frames[i],b=frames[i+1];final segment='(${a.value.toStringAsFixed(4)}+(${(b.value-a.value).toStringAsFixed(4)})*(($timeExpr-${a.key.toStringAsFixed(6)})/${(b.key-a.key).toStringAsFixed(6)}))';expression='if(lt($timeExpr,${b.key.toStringAsFixed(6)}),$segment,$expression)';}
+    expression='if(lt($timeExpr,${frames.first.key.toStringAsFixed(6)}),${frames.first.value.toStringAsFixed(4)},$expression)';
+    return expression;
+  }
   String _mangaClipStrengthExpression(MangaCutEffectClip clip,double totalDuration,double trimStart){
     final frames=clip.strengthKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
-    if(frames.isEmpty)return clip.strength.toStringAsFixed(4);
+    if(frames.isEmpty)return '(${clip.strength.toStringAsFixed(4)})*(${_mangaClipParameterExpression(clip,'amplitude',totalDuration,trimStart)})';
     final timeExpr='((t+${trimStart.toStringAsFixed(4)})/${math.max(.001,totalDuration).toStringAsFixed(4)})';
     var expression=frames.last.value.toStringAsFixed(4);
     for(var i=frames.length-2;i>=0;i--){
@@ -1808,7 +1818,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       expression='if(lt($timeExpr,${b.key.toStringAsFixed(6)}),$segment,$expression)';
     }
     expression='if(lt($timeExpr,${frames.first.key.toStringAsFixed(6)}),${frames.first.value.toStringAsFixed(4)},$expression)';
-    return expression;
+    return '($expression)*(${_mangaClipParameterExpression(clip,'amplitude',totalDuration,trimStart)})';
   }
 
   String? _exportMangaClipFilter(MangaCutEffectClip clip,double totalDuration,double trimStart,double clipDuration){
@@ -1816,26 +1826,29 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     final end=(clip.end*totalDuration-trimStart).clamp(0.0,clipDuration).toStringAsFixed(3);
     if(double.parse(end)<=double.parse(start))return null;
     final strength=_mangaClipStrengthExpression(clip,totalDuration,trimStart);
+    final frequency=_mangaClipParameterExpression(clip,'frequency',totalDuration,trimStart);
+    final phase=_mangaClipParameterExpression(clip,'phase',totalDuration,trimStart);
+    final angle=_mangaClipParameterExpression(clip,'angle',totalDuration,trimStart);
     final enable=":enable='between(t,$start,$end)'";
     switch(clip.name.toLowerCase()){
       case 'shake':
       case 'drift':
       case 'twitch':
-        return "rgbashift=rh='sin(t*42)*(5*($strength))':bh='-sin(t*37)*(5*($strength))'$enable";
+        return "rgbashift=rh='sin(t*42*($frequency)+($phase))*(5*($strength))':bh='-sin(t*37*($frequency)+($phase))*(5*($strength))'$enable";
       case 'pulse':
       case 'bounce':
-        return "eq=brightness='0.025*sin(t*5)*($strength)'$enable";
+        return "eq=brightness='0.025*sin(t*5*($frequency)+($phase))*($strength)'$enable";
       case 'spin':
       case 'swing':
       case 'wobble':
-        return "rotate='0.04*sin(t*4)*($strength)':c=none$enable";
+        return "rotate='($angle)+0.04*sin(t*4*($frequency))*($strength)':c=none$enable";
       case 'impact':
-        return "eq=brightness='if(lt(mod(t,0.5),0.08),0.5*($strength),0)'$enable";
+        return "eq=brightness='if(lt(mod(t*($frequency)+($phase),0.5),0.08),0.5*($strength),0)'$enable";
       case 'bend':
       case 'wind':
       case 'liquify':
       case 'oscillate':
-        return "geq=lum='lum(X+sin(Y/80+T*2)*(8*($strength)),Y)':cb='cb(X+sin(Y/80+T*2)*(8*($strength)),Y)':cr='cr(X+sin(Y/80+T*2)*(8*($strength)),Y)'$enable";
+        return "geq=lum='lum(X+sin(Y/80+T*2*($frequency)+($phase))*(8*($strength)),Y)':cb='cb(X+sin(Y/80+T*2)*(8*($strength)),Y)':cr='cr(X+sin(Y/80+T*2)*(8*($strength)),Y)'$enable";
       default:return null;
     }
   }
