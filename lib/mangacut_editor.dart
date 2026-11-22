@@ -104,7 +104,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     final data=await image.toByteData(format:ui.ImageByteFormat.rawRgba);
     if(data==null)return;
     final width=image.width,height=image.height,count=width*height;
-    final pixels=Uint8List.fromList(data.buffer.asUint8List());
+    final pixels=Uint8List.fromList(data.buffer.asUint8List(data.offsetInBytes,data.lengthInBytes));
     final mask=Uint8List(count),known=Uint8List(count);
     final radius=math.max(1.0,_brush*math.min(width,height)/500.0);
     void markDisk(double cx,double cy){
@@ -194,7 +194,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     rendered.dispose();
     if(png==null||!mounted)return;
     final docs=await getApplicationDocumentsDirectory();
-    final output=File('${docs.path}/mangacut_${widget.projectId}_composite.png');
+    final output=File('${docs.path}/mangacut_${widget.projectId}_${DateTime.now().microsecondsSinceEpoch}_composite.png');
     await output.writeAsBytes(png.buffer.asUint8List(),flush:true);
     widget.onApplyImage!(_target,output.path);
     if(mounted){
