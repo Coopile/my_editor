@@ -2298,8 +2298,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         child = applyFx(
           clipFx,
           child,
-          strength: clip.strengthAt(currentSeconds / projectSeconds),
-          speed: 1,
+          strength: clip.strengthAt(currentSeconds / projectSeconds) * clip.parameterAt('amplitude', currentSeconds / projectSeconds),
+          speed: clip.parameterAt('frequency', currentSeconds / projectSeconds),
           time: _ms / 1000,
         );
       }
