@@ -26,9 +26,11 @@ class _RigBone {
   double rotation;
   List<int> keys;
   final Map<int,double> rotationKeys;
-  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {};
-  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v))};
-  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())));
+  final Map<int,String> easingKeys;
+  final Map<int,double> overshootKeys;
+  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys, Map<int,String>? easingKeys, Map<int,double>? overshootKeys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {}, easingKeys = easingKeys ?? {}, overshootKeys = overshootKeys ?? {};
+  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v)),'easingKeys':easingKeys.map((k,v)=>MapEntry(k.toString(),v)),'overshootKeys':overshootKeys.map((k,v)=>MapEntry(k.toString(),v))};
+  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),easingKeys:(j['easingKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),v.toString())),overshootKeys:(j['overshootKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())));
 }
 
 class MangaCutEffectClip {
@@ -86,7 +88,57 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
   void _addEffect(String name){final e=MangaCutEffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
   void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();}_changed();}
-  double _rotationAt(_RigBone bone,int time){final frames=bone.rotationKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));if(frames.isEmpty)return bone.rotation;if(time<=frames.first.key)return frames.first.value;if(time>=frames.last.key)return frames.last.value;for(var i=1;i<frames.length;i++){if(time<=frames[i].key){final a=frames[i-1],b=frames[i];final t=(time-a.key)/(b.key-a.key);return a.value+(b.value-a.value)*t;}}return bone.rotation;}
+  double _easeProgress(_RigBone bone,int segmentStart,double t){
+    final mode=bone.easingKeys[segmentStart]??'Linear';
+    var value=t;
+    switch(mode){
+      case 'Ease In': value=t*t*t; break;
+      case 'Ease Out': value=1-math.pow(1-t,3).toDouble(); break;
+      case 'Ease In Out': value=t<.5?4*t*t*t:1-math.pow(-2*t+2,3).toDouble()/2; break;
+      case 'Overshoot':
+        final amount=bone.overshootKeys[segmentStart]??.18;
+        value=t*t*((amount+1)*t-amount)*2+ t*(1-t)*2;
+        value=t+(value-t);
+        break;
+      default: value=t;
+    }
+    return value;
+  }
+  double _rotationAt(_RigBone bone,int time){
+    final frames=bone.rotationKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
+    if(frames.isEmpty)return bone.rotation;
+    if(time<=frames.first.key)return frames.first.value;
+    if(time>=frames.last.key)return frames.last.value;
+    for(var i=1;i<frames.length;i++){
+      if(time<=frames[i].key){
+        final a=frames[i-1],b=frames[i];
+        final t=(time-a.key)/(b.key-a.key);
+        final eased=_easeProgress(bone,a.key,t);
+        return a.value+(b.value-a.value)*eased;
+      }
+    }
+    return bone.rotation;
+  }
+  Future<void> _openGraphEditor() async {
+    if(_selectedBone<0||_selectedBone>=_bones.length)return;
+    final bone=_bones[_selectedBone];
+    final keys=bone.rotationKeys.keys.toList()..sort();
+    if(keys.length<2){if(!bone.rotationKeys.containsKey(_time))_addKey();if(bone.rotationKeys.length<2){if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Add at least two bone keyframes to edit a motion curve.')));return;}}
+    final starts=bone.rotationKeys.keys.where((k)=>k<=_time).toList()..sort();
+    final segment=starts.isEmpty?bone.rotationKeys.keys.reduce(math.min):starts.last;
+    var mode=bone.easingKeys[segment]??'Linear';
+    var amount=bone.overshootKeys[segment]??.18;
+    await showDialog<void>(context:context,builder:(dialogContext)=>StatefulBuilder(builder:(context,setDialogState)=>AlertDialog(
+      backgroundColor:_panel,
+      title:Text('Motion curve · ${bone.name}'),
+      content:SizedBox(width:360,child:Column(mainAxisSize:MainAxisSize.min,children:[
+        DropdownButtonFormField<String>(value:mode,decoration:const InputDecoration(labelText:'Interpolation'),items:const ['Linear','Ease In','Ease Out','Ease In Out','Overshoot'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setDialogState(()=>mode=v??mode)),
+        if(mode=='Overshoot')Column(children:[const SizedBox(height:12),Text('Overshoot amount · ${amount.toStringAsFixed(2)}'),Slider(value:amount,min:0,max:.6,onChanged:(v)=>setDialogState(()=>amount=v))]),
+        const SizedBox(height:12),SizedBox(height:110,width:300,child:CustomPaint(painter:_CurvePreviewPainter(mode,amount))),
+      ])),
+      actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Cancel')),FilledButton(onPressed:(){bone.easingKeys[segment]=mode;bone.overshootKeys[segment]=amount;_changed();Navigator.pop(dialogContext);},child:const Text('Apply curve'))],
+    )));
+  }
   void _togglePlayback(){if(_playing){_playTimer?.cancel();_playTimer=null;setState(()=>_playing=false);_save();return;}if(_time>=_duration)_time=0;setState(()=>_playing=true);_playTimer=Timer.periodic(const Duration(milliseconds:16),(timer){if(!mounted){timer.cancel();return;}final next=_time+16;if(next>=_duration){_time=_duration;timer.cancel();_playTimer=null;_playing=false;}else{_time=next;}for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}setState((){});});}
   @override void dispose(){_playTimer?.cancel();_sourceImage?.dispose();super.dispose();}
   double _timelineTimeAt(double x,double width)=>((x/width).clamp(0.0,1.0)*_duration).toDouble();
@@ -199,7 +251,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     ] else if(_tab==2)...[
       const Text('Liquify brush · drag on the canvas to deform the preview mesh.',style:TextStyle(fontSize:11,color:Colors.white60)),_slider('Brush size',_brush,8,120,(v)=>setState(()=>_brush=v)),_slider('Strength',_strength,.05,1,(v)=>setState(()=>_strength=v)),TextButton.icon(onPressed:()=>setState(()=>_liquifyStrokes.clear()),icon:const Icon(Icons.refresh),label:const Text('Reset liquify')),
     ] else if(_tab==3)...[
-      const Text('Select a bone, move its joints on the canvas, then add keyframes on the timeline.',style:TextStyle(fontSize:11,color:Colors.white60)),if(_selectedBone>=0&&_selectedBone<_bones.length)_slider('Rotation',_bones[_selectedBone].rotation,-math.pi,math.pi,(v){_bones[_selectedBone].rotation=v;_changed();}),FilledButton.icon(onPressed:_addKey,icon:const Icon(Icons.key),label:const Text('Keyframe selected')),
+      const Text('Select a bone, move its joints on the canvas, then add keyframes on the timeline.',style:TextStyle(fontSize:11,color:Colors.white60)),if(_selectedBone>=0&&_selectedBone<_bones.length)_slider('Rotation',_bones[_selectedBone].rotation,-math.pi,math.pi,(v){_bones[_selectedBone].rotation=v;_changed();}),FilledButton.icon(onPressed:_addKey,icon:const Icon(Icons.key),label:const Text('Keyframe selected')),const SizedBox(height:8),OutlinedButton.icon(onPressed:_openGraphEditor,icon:const Icon(Icons.show_chart),label:const Text('Graph / easing editor')),
     ] else ...[
       const Text('Add an effect clip and choose which layer receives it.',style:TextStyle(fontSize:11,color:Colors.white60)),
       DropdownButtonFormField<String>(value:_target,decoration:const InputDecoration(labelText:'Target layer'),items:[for(final n in (widget.layerNames.isEmpty?['Layer 1']:widget.layerNames))DropdownMenuItem(value:n,child:Text(n,overflow:TextOverflow.ellipsis))],onChanged:(v)=>setState(()=>_target=v??_target)),
@@ -241,7 +293,7 @@ class _RigPainter extends CustomPainter {
     for(int i=0;i<bones.length;i++){final b=bones[i];final localA=Offset(b.a.dx*s.width,b.a.dy*s.height),localB=Offset(b.b.dx*s.width,b.b.dy*s.height);final rotatedB=localA+Offset((localB-localA).dx*math.cos(b.rotation)-(localB-localA).dy*math.sin(b.rotation),(localB-localA).dx*math.sin(b.rotation)+(localB-localA).dy*math.cos(b.rotation));final a=_applyParentTransforms(i,localA),z=_applyParentTransforms(i,rotatedB);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
   }
-  Offset _applyParentTransforms(int index,Offset point){
+  Offset _applyParentTransforms(int index,Offset point,Size size){
     final visited=<int>{};var parentId=bones[index].parent;
     while(parentId.isNotEmpty){final parentIndex=bones.indexWhere((bone)=>bone.id==parentId);if(parentIndex<0||!visited.add(parentIndex))break;final parent=bones[parentIndex];final pivot=Offset(parent.a.dx*size.width,parent.a.dy*size.height);final dx=point.dx-pivot.dx,dy=point.dy-pivot.dy;point=pivot+Offset(dx*math.cos(parent.rotation)-dy*math.sin(parent.rotation),dx*math.sin(parent.rotation)+dy*math.cos(parent.rotation));parentId=parent.parent;}
     return point;
@@ -284,8 +336,8 @@ class _RigPainter extends CustomPainter {
         (localB-localA).dx*math.cos(bone.rotation)-(localB-localA).dy*math.sin(bone.rotation),
         (localB-localA).dx*math.sin(bone.rotation)+(localB-localA).dy*math.cos(bone.rotation),
       );
-      final a=_applyParentTransforms(i,localA);
-      final b=_applyParentTransforms(i,rotatedB);
+      final a=_applyParentTransforms(i,localA,size);
+      final b=_applyParentTransforms(i,rotatedB,size);
       final segment=b-a;
       final lengthSquared=segment.dx*segment.dx+segment.dy*segment.dy;
       final projection=lengthSquared==0?0.0:(((point-a).dx*segment.dx+(point-a).dy*segment.dy)/lengthSquared).clamp(0.0,1.0);
@@ -341,6 +393,29 @@ class _RigPainter extends CustomPainter {
     canvas.drawVertices(vertices,BlendMode.src,Paint()..shader=shader);
   }
   @override bool shouldRepaint(covariant _RigPainter old)=>true;
+}
+class _CurvePreviewPainter extends CustomPainter {
+  final String mode;final double overshoot;
+  _CurvePreviewPainter(this.mode,this.overshoot);
+  @override void paint(Canvas canvas,Size size){
+    final grid=Paint()..color=Colors.white24..strokeWidth=1;
+    canvas.drawLine(Offset(0,size.height),Offset(size.width,size.height),grid);
+    canvas.drawLine(Offset(0,0),Offset(0,size.height),grid);
+    final path=Path();
+    for(var i=0;i<=100;i++){
+      final t=i/100;double v=t;
+      switch(mode){
+        case 'Ease In':v=t*t*t;break;
+        case 'Ease Out':v=1-math.pow(1-t,3).toDouble();break;
+        case 'Ease In Out':v=t<.5?4*t*t*t:1-math.pow(-2*t+2,3).toDouble()/2;break;
+        case 'Overshoot':v=t+math.sin(math.pi*t)*overshoot*1.5;break;
+      }
+      final point=Offset(t*size.width,size.height-v*size.height);
+      if(i==0)path.moveTo(point.dx,point.dy);else path.lineTo(point.dx,point.dy);
+    }
+    canvas.drawPath(path,Paint()..color=_accent..style=PaintingStyle.stroke..strokeWidth=3);
+  }
+  @override bool shouldRepaint(covariant _CurvePreviewPainter old)=>old.mode!=mode||old.overshoot!=overshoot;
 }
 class _StudioTimelinePainter extends CustomPainter{
   final List<_RigBone> bones;final List<MangaCutEffectClip> effects;final int time,duration;
