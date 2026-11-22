@@ -615,7 +615,7 @@ class _RigPainter extends CustomPainter {
     final dx=math.sin(seconds*31*shakeFrequency+phase)*shake*5+math.sin(seconds*2.2)*drift*size.width*.025;
     final dy=math.cos(seconds*27*shakeFrequency+phase)*shake*3-math.sin(seconds*5*pulseFrequency).abs()*impact*size.height*.025;
     final scale=1+math.sin(seconds*5*pulseFrequency)*pulse*.035*_effectParameter('Pulse','scale',1);
-    final angle=math.sin(seconds*4*math.max(_effectParameter('Swing','frequency',1),_effectParameter('Wobble','frequency',1),_effectParameter('Oscillate','frequency',1)))*swing*.08+seconds*spin*.35+_effectParameter('Spin','angle',0);
+    final angle=math.sin(seconds*4*math.max(_effectParameter('Swing','frequency',1),math.max(_effectParameter('Wobble','frequency',1),_effectParameter('Oscillate','frequency',1))))*swing*.08+seconds*spin*.35+_effectParameter('Spin','angle',0);
     canvas.translate(center.dx+dx,center.dy+dy);
     canvas.rotate(angle);
     canvas.scale(scale,scale);
