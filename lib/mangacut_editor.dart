@@ -158,7 +158,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     },
     onPanStart:(d){if(_tab==1||_tab==2){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).add([p]));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);final b=_bones[_selectedBone];_dragBoneEnd=(b.a-p).distance<(b.b-p).distance?0:1;}},
     onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));if(_tab==1&&_maskErase){final radius=(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.002,.5);setState((){for(final stroke in _maskStrokes){stroke.removeWhere((point)=>(point-p).distance<=radius);} _maskStrokes.removeWhere((stroke)=>stroke.isEmpty);});}else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
-    child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage)),
+    child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[const Text('TIMELINE',style:TextStyle(fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1)),const Spacer(),Text('${(_time/1000).toStringAsFixed(2)}s',style:const TextStyle(color:Colors.white60,fontSize:11)),IconButton(onPressed:_addKey,icon:const Icon(Icons.add_box_outlined,size:19),tooltip:'Add keyframe'),IconButton(onPressed:_togglePlayback,icon:Icon(_playing?Icons.pause:Icons.play_arrow,size:20))]),
@@ -179,7 +179,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     ] else ...[
       const Text('Add an effect clip and choose which layer receives it.',style:TextStyle(fontSize:11,color:Colors.white60)),
       DropdownButtonFormField<String>(value:_target,decoration:const InputDecoration(labelText:'Target layer'),items:[for(final n in (widget.layerNames.isEmpty?['Layer 1']:widget.layerNames))DropdownMenuItem(value:n,child:Text(n,overflow:TextOverflow.ellipsis))],onChanged:(v)=>setState(()=>_target=v??_target)),
-      Wrap(spacing:6,children:[for(final name in ['Shake','Pulse','Bounce','Oscillate','Spin','Swing','Wobble','Impact','Drift','Twitch','Liquify','Wind'])ActionChip(label:Text(name),onPressed:()=>_addEffect(name))]),
+      Wrap(spacing:6,children:[for(final name in ['Shake','Pulse','Bounce','Oscillate','Spin','Swing','Wobble','Impact','Drift','Twitch','Bend','Wind','Liquify'])ActionChip(label:Text(name),onPressed:()=>_addEffect(name))]),
       for(int i=0;i<_effects.length;i++)ListTile(dense:true,selected:_selectedEffect==i,title:Text(_effects[i].name,style:const TextStyle(fontSize:12)),subtitle:Text('Target: ${_effects[i].target}',style:const TextStyle(fontSize:9)),onTap:()=>setState(()=>_selectedEffect=i),trailing:IconButton(onPressed:(){_effects.removeAt(i);_selectedEffect=-1;_changed();},icon:const Icon(Icons.delete_outline,size:17))),
       if(_selectedEffect>=0&&_selectedEffect<_effects.length)_slider('Effect strength',_effects[_selectedEffect].strength,0,2,(v){_effects[_selectedEffect].strength=v;_changed();}),
     ],
@@ -188,8 +188,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
 }
 
 class _RigPainter extends CustomPainter {
-  final List<_RigBone> bones; final int selected,tab; final List<List<Offset>> masks,liquify; final double brush,strength; final ui.Image? sourceImage;
-  _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength,this.sourceImage);
+  final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks,liquify; final List<_EffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
+  _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength,this.sourceImage,this.time,this.duration,this.effects);
   @override void paint(Canvas c,Size s){
     final bg=Paint()..color=const Color(0xFF171A22);c.drawRect(Offset.zero & s,bg);
     final grid=Paint()..color=Colors.white.withOpacity(.045)..strokeWidth=1;
@@ -197,6 +197,8 @@ class _RigPainter extends CustomPainter {
     for(double y=0;y<s.height;y+=24)c.drawLine(Offset(0,y),Offset(s.width,y),grid);
     final center=Offset(s.width*.5,s.height*.5);
     if(sourceImage!=null){
+      c.save();
+      _applyMotionEffects(c,s);
       c.saveLayer(Offset.zero & s,Paint());
       _drawImageMesh(c,s,sourceImage!);
       final erase=Paint()..blendMode=BlendMode.dstOut..style=PaintingStyle.stroke..strokeCap=StrokeCap.round..strokeJoin=StrokeJoin.round..strokeWidth=brush;
@@ -204,6 +206,7 @@ class _RigPainter extends CustomPainter {
         if(stroke.length==1){c.drawCircle(Offset(stroke.first.dx*s.width,stroke.first.dy*s.height),brush/2,Paint()..blendMode=BlendMode.dstOut);}
         for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),erase);
       }
+      c.restore();
       c.restore();
     } else {
       c.drawOval(Rect.fromCenter(center:center,width:s.width*.28,height:s.height*.48),Paint()..color=const Color(0xFF29364A));
@@ -219,6 +222,33 @@ class _RigPainter extends CustomPainter {
     while(parentId.isNotEmpty){final parentIndex=bones.indexWhere((bone)=>bone.id==parentId);if(parentIndex<0||!visited.add(parentIndex))break;final parent=bones[parentIndex];final pivot=Offset(parent.a.dx*size.width,parent.a.dy*size.height);final dx=point.dx-pivot.dx,dy=point.dy-pivot.dy;point=pivot+Offset(dx*math.cos(parent.rotation)-dy*math.sin(parent.rotation),dx*math.sin(parent.rotation)+dy*math.cos(parent.rotation));parentId=parent.parent;}
     return point;
   }
+  double _effectStrength(String name){
+    final normalized=time/duration;
+    var total=0.0;
+    for(final effect in effects){
+      if(effect.name.toLowerCase()!=name.toLowerCase())continue;
+      if(normalized>=effect.start&&normalized<=effect.end)total+=effect.strength;
+    }
+    return total;
+  }
+  void _applyMotionEffects(Canvas canvas,Size size){
+    final seconds=time/1000.0;
+    final shake=_effectStrength('Shake')+_effectStrength('Twitch')*.45;
+    final pulse=_effectStrength('Pulse')+_effectStrength('Bounce')*.35;
+    final spin=_effectStrength('Spin');
+    final swing=_effectStrength('Swing')+_effectStrength('Wobble')*.35;
+    final drift=_effectStrength('Drift');
+    final impact=_effectStrength('Impact');
+    final center=Offset(size.width/2,size.height/2);
+    final dx=math.sin(seconds*31)*shake*5+math.sin(seconds*2.2)*drift*size.width*.025;
+    final dy=math.cos(seconds*27)*shake*3-math.abs(math.sin(seconds*5))*impact*size.height*.025;
+    final scale=1+math.sin(seconds*5)*pulse*.035;
+    final angle=math.sin(seconds*4)*swing*.08+seconds*spin*.35;
+    canvas.translate(center.dx+dx,center.dy+dy);
+    canvas.rotate(angle);
+    canvas.scale(scale,scale);
+    canvas.translate(-center.dx,-center.dy);
+  }
   void _drawImageMesh(Canvas canvas,Size size,ui.Image image){
     const cols=24, rows=24;
     final positions=<Offset>[], tex=<Offset>[], indices=<int>[];
@@ -226,6 +256,10 @@ class _RigPainter extends CustomPainter {
       for(var x=0;x<=cols;x++){
         final u=x/cols,v=y/rows;
         var px=u*size.width,py=v*size.height;
+        final bend=_effectStrength('Bend');
+        final wind=_effectStrength('Wind');
+        if(bend>0){py+=math.sin(u*math.pi)*bend*size.height*.12;}
+        if(wind>0){px+=math.sin(v*9+time*.006)*wind*size.width*.025*(1-v*.35);py+=math.cos(u*7+time*.004)*wind*size.height*.008;}
         {
           for(final stroke in liquify){
             for(var k=1;k<stroke.length;k++){
