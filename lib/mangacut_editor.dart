@@ -44,7 +44,9 @@ class MangaCutEffectClip {
   double start, end, strength;
   List<int> keys;
   Map<double,double> strengthKeys;
-  MangaCutEffectClip(this.id,this.name,this.target,this.start,this.end,{this.strength=1,List<int>? keys,Map<double,double>? strengthKeys}) : keys=keys ?? [],strengthKeys=strengthKeys??{};
+  Map<String,double> parameters;
+  Map<String,Map<double,double>> parameterKeys;
+  MangaCutEffectClip(this.id,this.name,this.target,this.start,this.end,{this.strength=1,List<int>? keys,Map<double,double>? strengthKeys,Map<String,double>? parameters,Map<String,Map<double,double>>? parameterKeys}) : keys=keys ?? [],strengthKeys=strengthKeys??{},parameters=parameters??{'amplitude':1,'frequency':1,'phase':0,'angle':0,'scale':1},parameterKeys=parameterKeys??{};
   double strengthAt(double normalizedTime){
     final frames=strengthKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
     if(frames.isEmpty)return strength;
@@ -59,8 +61,17 @@ class MangaCutEffectClip {
     }
     return strength;
   }
-  Map<String,dynamic> toJson()=>{'id':id,'name':name,'target':target,'start':start,'end':end,'strength':strength,'keys':keys,'strengthKeys':strengthKeys.map((k,v)=>MapEntry(k.toString(),v))};
-  factory MangaCutEffectClip.fromJson(Map<String,dynamic> j)=>MangaCutEffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>(),strengthKeys:(j['strengthKeys'] as Map? ?? {}).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())));
+  double parameterAt(String name,double normalizedTime){
+    final frames=parameterKeys[name]?.entries.toList()??<MapEntry<double,double>>[];
+    frames.sort((a,b)=>a.key.compareTo(b.key));
+    if(frames.isEmpty)return parameters[name]??1;
+    if(normalizedTime<=frames.first.key)return frames.first.value;
+    if(normalizedTime>=frames.last.key)return frames.last.value;
+    for(var i=1;i<frames.length;i++){if(normalizedTime<=frames[i].key){final a=frames[i-1],b=frames[i];final t=(normalizedTime-a.key)/(b.key-a.key);return a.value+(b.value-a.value)*t;}}
+    return parameters[name]??1;
+  }
+  Map<String,dynamic> toJson()=>{'parameters':parameters,'parameterKeys':parameterKeys.map((name,frames)=>MapEntry(name,frames.map((k,v)=>MapEntry(k.toString(),v)) )),'id':id,'name':name,'target':target,'start':start,'end':end,'strength':strength,'keys':keys,'strengthKeys':strengthKeys.map((k,v)=>MapEntry(k.toString(),v))};
+  factory MangaCutEffectClip.fromJson(Map<String,dynamic> j)=>MangaCutEffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>(),strengthKeys:(j['strengthKeys'] as Map? ?? {}).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())),parameters:(j['parameters'] as Map? ?? {}).map((k,v)=>MapEntry(k.toString(),(v as num).toDouble())),parameterKeys:(j['parameterKeys'] as Map? ?? {}).map((name,frames)=>MapEntry(name.toString(),(frames as Map).map((k,v)=>MapEntry(double.parse(k.toString()),(v as num).toDouble())))));
 }
 
 class _WeightStroke {
@@ -293,7 +304,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   bool _wouldCreateBoneCycle(String childId,String parentId){var current=parentId;final visited=<String>{};while(current.isNotEmpty){if(current==childId)return true;if(!visited.add(current))return true;final index=_bones.indexWhere((bone)=>bone.id==current);if(index<0)return false;current=_bones[index].parent;}return false;}
   void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
   void _addEffect(String name){final e=MangaCutEffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
-  void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;b.aKeys[_time]=b.a;b.bKeys[_time]=b.b;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();e.strengthKeys[_time/_duration]=e.strength;}_changed();}
+  void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;b.aKeys[_time]=b.a;b.bKeys[_time]=b.b;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();e.strengthKeys[_time/_duration]=e.strength;for(final entry in e.parameters.entries){e.parameterKeys.putIfAbsent(entry.key,()=>{})[_time/_duration]=entry.value;}}_changed();}
   double _easeProgress(_RigBone bone,int segmentStart,double t){
     final mode=bone.easingKeys[segmentStart]??'Linear';
     var value=t;
@@ -506,7 +517,11 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       DropdownButtonFormField<String>(value:_target,decoration:const InputDecoration(labelText:'Target layer'),items:[for(final n in (widget.layerNames.isEmpty?['Layer 1']:widget.layerNames))DropdownMenuItem(value:n,child:Text(n,overflow:TextOverflow.ellipsis))],onChanged:(v)=>setState(()=>_target=v??_target)),
       Wrap(spacing:6,children:[for(final name in ['Shake','Pulse','Bounce','Oscillate','Spin','Swing','Wobble','Impact','Drift','Twitch','Bend','Wind','Liquify'])ActionChip(label:Text(name),onPressed:()=>_addEffect(name))]),
       for(int i=0;i<_effects.length;i++)ListTile(dense:true,selected:_selectedEffect==i,title:Text(_effects[i].name,style:const TextStyle(fontSize:12)),subtitle:Text('Target: ${_effects[i].target}',style:const TextStyle(fontSize:9)),onTap:()=>setState(()=>_selectedEffect=i),trailing:IconButton(onPressed:(){_effects.removeAt(i);_selectedEffect=-1;_changed();},icon:const Icon(Icons.delete_outline,size:17))),
-      if(_selectedEffect>=0&&_selectedEffect<_effects.length)_slider('Effect strength',_effects[_selectedEffect].strength,0,2,(v){final effect=_effects[_selectedEffect];effect.strength=v;if(effect.strengthKeys.containsKey(_time/_duration))effect.strengthKeys[_time/_duration]=v;_changed();}),
+      if(_selectedEffect>=0&&_selectedEffect<_effects.length)...[
+        _slider('Effect strength',_effects[_selectedEffect].strength,0,2,(v){final effect=_effects[_selectedEffect];effect.strength=v;if(effect.strengthKeys.containsKey(_time/_duration))effect.strengthKeys[_time/_duration]=v;_changed();}),
+        for(final spec in <List<dynamic>>[['Amplitude', 'amplitude',0.0,3.0],['Frequency','frequency',0.1,8.0],['Phase','phase',-6.28,6.28],['Angle','angle',-6.28,6.28],['Scale','scale',0.1,3.0]])_slider(spec[0] as String,_effects[_selectedEffect].parameters[spec[1]]??1,spec[2] as double,spec[3] as double,(v){final effect=_effects[_selectedEffect];final key=spec[1] as String;effect.parameters[key]=v;if(effect.parameterKeys[key]?.containsKey(_time/_duration)??false)effect.parameterKeys[key]![_time/_duration]=v;_changed();}),
+        FilledButton.icon(onPressed:(){final effect=_effects[_selectedEffect];final t=_time/_duration;if(!effect.keys.contains(_time))effect.keys.add(_time);effect.keys.sort();effect.strengthKeys[t]=effect.strength;for(final entry in effect.parameters.entries){effect.parameterKeys.putIfAbsent(entry.key,()=>{})[t]=entry.value;}_changed();},icon:const Icon(Icons.key),label:const Text('Keyframe all effect parameters'))
+      ],
     ],
   ])));
   Widget _slider(String title,double value,double min,double max,ValueChanged<double> change)=>Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Text('$title  ${value.toStringAsFixed(2)}',style:const TextStyle(fontSize:11,color:Colors.white70)),Slider(value:value.clamp(min,max).toDouble(),min:min,max:max,onChanged:change,activeColor:_accent)]);
