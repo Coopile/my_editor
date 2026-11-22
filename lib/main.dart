@@ -1851,7 +1851,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Spin':
         return null;
       case 'Wave Warp':
-        final amplitude = (8 * strength).toStringAsFixed(2);
+        final amplitude = '(8*' + strength + ')';
         final wavelength = (80 / strength.clamp(.25, 2)).toStringAsFixed(2);
         return "geq=lum='lum(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cb='cb(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cr='cr(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)'";
       case 'Scale Assist':
@@ -2051,15 +2051,15 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             case 'drift':
             case 'twitch':
               final frequency = clip.name.toLowerCase() == 'twitch' ? 48 : 9;
-              textXTerms.add('if(' + active + ',sin(t*' + frequency.toString() + ')*' + (12 * strength).toStringAsFixed(2) + ',0)');
+              textXTerms.add('if(' + active + ',sin(t*' + frequency.toString() + ')*' + '(12*' + strength + ')' + ',0)');
               textYTerms.add('if(' + active + ',cos(t*' + frequency.toString() + ')*' + (8 * strength).toStringAsFixed(2) + ',0)');
               break;
             case 'pulse':
             case 'bounce':
-              textYTerms.add('if(' + active + ',sin(t*11)*' + (9 * strength).toStringAsFixed(2) + ',0)');
+              textYTerms.add('if(' + active + ',sin(t*11)*' + '(9*' + strength + ')' + ',0)');
               break;
             case 'impact':
-              textYTerms.add('if(' + active + ',if(lt(mod(t-' + clipStart.toStringAsFixed(3) + ',0.5),0.08),-' + (7 * strength).toStringAsFixed(2) + ',0),0)');
+              textYTerms.add('if(' + active + ',if(lt(mod(t-' + clipStart.toStringAsFixed(3) + ',0.5),0.08),-' + '(7*' + strength + ')' + ',0),0)');
               break;
           }
         }
