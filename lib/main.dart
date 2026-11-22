@@ -1821,21 +1821,21 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'shake':
       case 'drift':
       case 'twitch':
-        return "rgbashift=rh='sin(t*42)*${(5*strength).toStringAsFixed(2)}':bh='-sin(t*37)*${(5*strength).toStringAsFixed(2)}'$enable";
+        return "rgbashift=rh='sin(t*42)*(5*($strength))':bh='-sin(t*37)*(5*($strength))'$enable";
       case 'pulse':
       case 'bounce':
-        return "eq=brightness='0.025*sin(t*5)*$strength'$enable";
+        return "eq=brightness='0.025*sin(t*5)*($strength)'$enable";
       case 'spin':
       case 'swing':
       case 'wobble':
-        return "rotate='0.04*sin(t*4)*$strength':c=none$enable";
+        return "rotate='0.04*sin(t*4)*($strength)':c=none$enable";
       case 'impact':
-        return "eq=brightness='if(lt(mod(t,0.5),0.08),${(0.5*strength).toStringAsFixed(3)},0)'$enable";
+        return "eq=brightness='if(lt(mod(t,0.5),0.08),0.5*($strength),0)'$enable";
       case 'bend':
       case 'wind':
       case 'liquify':
       case 'oscillate':
-        return "geq=lum='lum(X+sin(Y/80+T*2)*${(8*strength).toStringAsFixed(2)},Y)':cb='cb(X+sin(Y/80+T*2)*${(8*strength).toStringAsFixed(2)},Y)':cr='cr(X+sin(Y/80+T*2)*${(8*strength).toStringAsFixed(2)},Y)'$enable";
+        return "geq=lum='lum(X+sin(Y/80+T*2)*(8*($strength)),Y)':cb='cb(X+sin(Y/80+T*2)*(8*($strength)),Y)':cr='cr(X+sin(Y/80+T*2)*(8*($strength)),Y)'$enable";
       default:return null;
     }
   }
@@ -1851,7 +1851,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Spin':
         return null;
       case 'Wave Warp':
-        final amplitude = '(8*' + strength + ')';
+        final amplitude = (8 * strength).toStringAsFixed(2);
         final wavelength = (80 / strength.clamp(.25, 2)).toStringAsFixed(2);
         return "geq=lum='lum(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cb='cb(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cr='cr(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)'";
       case 'Scale Assist':
