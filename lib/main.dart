@@ -3716,6 +3716,21 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 projectId: widget.projectId,
                 projectName: widget.projectName,
                 layerNames: _layers.map((layer) => layer.text).toList(),
+                onApplyImage: (target, imagePath) {
+                  if (!mounted) return;
+                  final index = _layers.indexWhere((layer) => layer.text == target);
+                  if (index >= 0 && _layers[index].isImage) {
+                    _pushUndo();
+                    setState(() {
+                      _layers[index].imagePath = imagePath;
+                      _sel = index;
+                    });
+                  } else {
+                    final position = index >= 0 ? _layers[index].pos : const Offset(80, 80);
+                    _add(Layer.image(imagePath, position));
+                  }
+                  _saveProject();
+                },
                 onApplyEffects: (clips) {
                   if (!mounted) return;
                   setState(() {
