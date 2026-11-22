@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'dart:math' as math;
+import 'dart:io';
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,6 +42,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   final List<_EffectClip> _effects=[];
   final List<List<Offset>> _maskStrokes=[];
   final List<List<Offset>> _liquifyStrokes=[];
+  ui.Image? _sourceImage;
+  String? _sourceImagePath;
   int _tab=0, _selectedBone=-1, _selectedEffect=-1, _time=0;
   int _duration=6000;
   double _brush=28, _strength=.55;
@@ -54,9 +60,12 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       _bones..clear()..addAll((j['bones'] as List? ?? []).map((v)=>_RigBone.fromJson(Map<String,dynamic>.from(v))));
       _effects..clear()..addAll((j['effects'] as List? ?? []).map((v)=>_EffectClip.fromJson(Map<String,dynamic>.from(v))));
       _time=(j['time'] as num?)?.toInt() ?? 0;
+      _sourceImagePath=j['sourceImagePath'] as String?;
     }); } catch(_){}
   }
-  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration})); }
+  Future<ui.Image> _decodeImage(Uint8List bytes) async { final codec=await ui.instantiateImageCodec(bytes); final frame=await codec.getNextFrame(); return frame.image; }
+  Future<void> _pickSourceImage() async { final picked=await ImagePicker().pickImage(source:ImageSource.gallery,imageQuality:95); if(picked==null)return; final bytes=await picked.readAsBytes(); final decoded=await _decodeImage(bytes); if(!mounted)return; setState((){_sourceImage=decoded;_sourceImagePath=picked.path;_maskStrokes.clear();_liquifyStrokes.clear();}); await _save(); }
+  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath})); }
   void _changed(){setState((){});_save();}
   void _addBone(){
     final n=_bones.length+1; final x=.28+(n%3)*.16, y=.28+(n%4)*.11;
@@ -94,14 +103,14 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     },
     onPanStart:(d){if(_tab==1||_tab==2){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).add([p]));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);final b=_bones[_selectedBone];_dragBoneEnd=(b.a-p).distance<(b.b-p).distance?0:1;}},
     onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
-    child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength)),
+    child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[const Text('TIMELINE',style:TextStyle(fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1)),const Spacer(),Text('${(_time/1000).toStringAsFixed(2)}s',style:const TextStyle(color:Colors.white60,fontSize:11)),IconButton(onPressed:_addKey,icon:const Icon(Icons.add_box_outlined,size:19),tooltip:'Add keyframe'),IconButton(onPressed:()=>setState(()=>_playing=!_playing),icon:Icon(_playing?Icons.pause:Icons.play_arrow,size:20))]),
     Expanded(child:LayoutBuilder(builder:(context,c)=>GestureDetector(onTapDown:(d)=>_timelineTap(d.localPosition,c.maxWidth),onHorizontalDragUpdate:(d)=>_timelineTap(d.localPosition,c.maxWidth),child:CustomPaint(size:Size.infinite,painter:_StudioTimelinePainter(_bones,_effects,_time,_duration))))),
   ]));
   Widget _inspector()=>Container(color:_panel,padding:const EdgeInsets.all(12),child:SingleChildScrollView(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-    Row(children:[const Expanded(child:Text('WORKSPACE TOOLS',style:TextStyle(fontWeight:FontWeight.w900,fontSize:11,letterSpacing:1))),IconButton(onPressed:_save,icon:const Icon(Icons.save,size:18))]),
+    Row(children:[const Expanded(child:Text('WORKSPACE TOOLS',style:TextStyle(fontWeight:FontWeight.w900,fontSize:11,letterSpacing:1))),IconButton(onPressed:_pickSourceImage,icon:const Icon(Icons.add_photo_alternate_outlined,size:18),tooltip:'Import image'),IconButton(onPressed:_save,icon:const Icon(Icons.save,size:18))]),
     if(_tab==0)...[
       Row(children:[const Text('SKELETON',style:TextStyle(color:Colors.white60,fontSize:10)),const Spacer(),IconButton(onPressed:_addBone,icon:const Icon(Icons.add_circle,color:_accent)),IconButton(onPressed:_deleteBone,icon:const Icon(Icons.delete_outline,color:Colors.redAccent))]),
       for(int i=0;i<_bones.length;i++)ListTile(dense:true,selected:_selectedBone==i,leading:const Icon(Icons.account_tree,size:17),title:TextField(controller:TextEditingController(text:_bones[i].name),style:const TextStyle(fontSize:12),decoration:const InputDecoration(border:InputBorder.none,isDense:true),onSubmitted:(v){_bones[i].name=v;_changed();}),subtitle:Text(_bones[i].parent.isEmpty?'Root bone':'Child bone',style:const TextStyle(fontSize:9,color:Colors.white38)),onTap:()=>setState(()=>_selectedBone=i),trailing:IconButton(icon:const Icon(Icons.close,size:16),onPressed:()=>setState((){_selectedBone=i;_deleteBone();}))),
@@ -132,12 +141,48 @@ class _RigPainter extends CustomPainter {
     for(double x=0;x<s.width;x+=24)c.drawLine(Offset(x,0),Offset(x,s.height),grid);
     for(double y=0;y<s.height;y+=24)c.drawLine(Offset(0,y),Offset(s.width,y),grid);
     final center=Offset(s.width*.5,s.height*.5);
+    if(sourceImage!=null){_drawImageMesh(c,s,sourceImage!);} else {
     c.drawOval(Rect.fromCenter(center:center,width:s.width*.28,height:s.height*.48),Paint()..color=const Color(0xFF29364A));
-    c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B));
+    c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B)); }
     for(final stroke in masks){final p=Paint()..color=Colors.white.withOpacity(.8)..strokeWidth=brush..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
     for(final stroke in liquify){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.8)..strokeWidth=2..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
     for(int i=0;i<bones.length;i++){final b=bones[i],a=Offset(b.a.dx*s.width,b.a.dy*s.height),z=Offset(b.b.dx*s.width,b.b.dy*s.height);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
+  }
+  void _drawImageMesh(Canvas canvas,Size size,ui.Image image){
+    const cols=24, rows=24;
+    final positions=<Offset>[], tex=<Offset>[], indices=<int>[];
+    for(var y=0;y<=rows;y++){
+      for(var x=0;x<=cols;x++){
+        final u=x/cols,v=y/rows;
+        var px=u*size.width,py=v*size.height;
+        if(tab==2){
+          for(final stroke in liquify){
+            for(var k=1;k<stroke.length;k++){
+              final prev=stroke[k-1],cur=stroke[k];
+              final dx=cur.dx-prev.dx,dy=cur.dy-prev.dy;
+              final cx=cur.dx*size.width,cy=cur.dy*size.height;
+              final vx=px-cx,vy=py-cy;
+              final radius=brush*1.8,dist=math.sqrt(vx*vx+vy*vy);
+              if(dist<radius){
+                final falloff=1-dist/radius;
+                px-=dx*size.width*strength*falloff*2.2;
+                py-=dy*size.height*strength*falloff*2.2;
+              }
+            }
+          }
+        }
+        positions.add(Offset(px,py));
+        tex.add(Offset(u*image.width.toDouble(),v*image.height.toDouble()));
+      }
+    }
+    for(var y=0;y<rows;y++)for(var x=0;x<cols;x++){
+      final a=y*(cols+1)+x,b=a+1,d=a+cols+1,e=d+1;
+      indices.addAll([a,b,d,b,e,d]);
+    }
+    final vertices=ui.Vertices(ui.VertexMode.triangles,positions,textureCoordinates:tex,indices:indices);
+    final shader=ui.ImageShader(image,ui.TileMode.clamp,ui.TileMode.clamp,Float64List.fromList([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]));
+    canvas.drawVertices(vertices,BlendMode.src,Paint()..shader=shader);
   }
   @override bool shouldRepaint(covariant _RigPainter old)=>true;
 }
