@@ -133,8 +133,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
 }
 
 class _RigPainter extends CustomPainter {
-  final List<_RigBone> bones; final int selected,tab; final List<List<Offset>> masks,liquify; final double brush,strength;
-  _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength);
+  final List<_RigBone> bones; final int selected,tab; final List<List<Offset>> masks,liquify; final double brush,strength; final ui.Image? sourceImage;
+  _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength,this.sourceImage);
   @override void paint(Canvas c,Size s){
     final bg=Paint()..color=const Color(0xFF171A22);c.drawRect(Offset.zero & s,bg);
     final grid=Paint()..color=Colors.white.withOpacity(.045)..strokeWidth=1;
