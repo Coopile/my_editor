@@ -43,6 +43,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   double _brush=28, _strength=.55;
   String _target='';
   bool _playing=false, _maskErase=false;
+  int _dragBoneEnd=0;
   String get _storageKey=>'mangacut.workspace.${widget.projectId}';
 
   @override
@@ -83,8 +84,16 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   ]));
   Widget _tabButton(String name,IconData icon,int index)=>Padding(padding:const EdgeInsets.symmetric(horizontal:5,vertical:6),child:ChoiceChip(selected:_tab==index,label:Row(mainAxisSize:MainAxisSize.min,children:[Icon(icon,size:16),const SizedBox(width:6),Text(name)]),onSelected:(_)=>setState(()=>_tab=index),selectedColor:_accent,backgroundColor:const Color(0xFF282A34)));
   Widget _canvas()=>Container(color:const Color(0xFF08090D),child:LayoutBuilder(builder:(context,c)=>GestureDetector(
-    onPanStart:(d){if(_tab==1||_tab==2){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).add([p]));}},
-    onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}},
+    onTapDown:(d){
+      if(_tab==0&&_bones.isNotEmpty){
+        final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);
+        var best=-1;var distance=double.infinity;
+        for(var i=0;i<_bones.length;i++){final b=_bones[i];final da=(b.a-p).distance,db=(b.b-p).distance;final dd=math.min(da,db);if(dd<distance){distance=dd;best=i;_dragBoneEnd=da<db?0:1;}}
+        if(best>=0)setState(()=>_selectedBone=best);
+      }
+    },
+    onPanStart:(d){if(_tab==1||_tab==2){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).add([p]));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);final b=_bones[_selectedBone];_dragBoneEnd=(b.a-p).distance<(b.b-p).distance?0:1;}},
+    onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -127,7 +136,7 @@ class _RigPainter extends CustomPainter {
     c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B));
     for(final stroke in masks){final p=Paint()..color=Colors.white.withOpacity(.8)..strokeWidth=brush..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
     for(final stroke in liquify){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.8)..strokeWidth=2..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
-    for(int i=0;i<bones.length;i++){final b=bones[i],a=Offset(b.a.dx*s.width,b.a.dy*s.height),z=Offset(b.b.dx*s.width,b.b.dy*s.height);final p=Paint()..color=i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF)..strokeWidth=i==selected?5:3..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
+    for(int i=0;i<bones.length;i++){final b=bones[i],a=Offset(b.a.dx*s.width,b.a.dy*s.height),z=Offset(b.b.dx*s.width,b.b.dy*s.height);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
   }
   @override bool shouldRepaint(covariant _RigPainter old)=>true;
@@ -139,7 +148,7 @@ class _StudioTimelinePainter extends CustomPainter{
     final row=math.max(22.0,s.height/(bones.length+effects.length+1));final line=Paint()..color=Colors.white12;
     for(int i=0;i<bones.length+effects.length+1;i++)c.drawLine(Offset(0,row*i),Offset(s.width,row*i),line);
     var r=0;for(final b in bones){final y=row*(r+.5);c.drawTextMarker(Offset(4,y-6),b.name,Colors.white70);for(final k in b.keys){final x=k/duration*s.width;c.drawCircle(Offset(x,y),4,Paint()..color=const Color(0xFFFFD76A));}r++;}
-    for(final e in effects){final y=row*(r+.5),x=e.start*s.width,w=(e.end-e.start)*s.width;c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x,y-8,w.clamp(8.0,s.width),16),const Radius.circular(3)),Paint()..color=const Color(0xFF7655E8));for(final k in e.keys)c.drawCircle(Offset(k/duration*s.width,y),3,Paint()..color=Colors.white);r++;}
+    for(final e in effects){final y=row*(r+.5),x=e.start*s.width,w=(e.end-e.start)*s.width;c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x,y-8,w.clamp(0.0,s.width),16),const Radius.circular(3)),Paint()..color=const Color(0xFF7655E8));for(final k in e.keys)c.drawCircle(Offset(k/duration*s.width,y),3,Paint()..color=Colors.white);r++;}
     final x=time/duration*s.width;c.drawLine(Offset(x,0),Offset(x,s.height),Paint()..color=Colors.white..strokeWidth=2);
   }
   @override bool shouldRepaint(covariant _StudioTimelinePainter old)=>true;
