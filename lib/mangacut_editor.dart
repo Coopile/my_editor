@@ -173,19 +173,38 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       void fillNeighbor(int target){
         if(mask[target]==0||known[target]==1)return;
         final tx=target%width,ty=target~/width;
-        var r=0,g=0,b=0,a=0,n=0;
-        void addKnown(int neighbor){
-          if(known[neighbor]==0)return;
-          final offset=neighbor*4;
-          r+=pixels[offset];g+=pixels[offset+1];b+=pixels[offset+2];a+=pixels[offset+3];n++;
+        var bestScore=double.infinity,bestIndex=-1;
+        const patchRadius=1,searchRadius=32,searchStep=4;
+        for(var sy=math.max(patchRadius,ty-searchRadius);sy<math.min(height-patchRadius,ty+searchRadius);sy+=searchStep){
+          for(var sx=math.max(patchRadius,tx-searchRadius);sx<math.min(width-patchRadius,tx+searchRadius);sx+=searchStep){
+            final candidate=sy*width+sx;
+            if(mask[candidate]==1)continue;
+            var score=0.0,samples=0;
+            for(var oy=-patchRadius;oy<=patchRadius;oy++)for(var ox=-patchRadius;ox<=patchRadius;ox++){
+              final nx=tx+ox,ny=ty+oy,cx=sx+ox,cy=sy+oy;
+              if(nx<0||ny<0||nx>=width||ny>=height||cx<0||cy<0||cx>=width||cy>=height)continue;
+              final targetNeighbor=ny*width+nx,candidateNeighbor=cy*width+cx;
+              if(mask[targetNeighbor]==1||known[targetNeighbor]==0)continue;
+              final to=targetNeighbor*4,co=candidateNeighbor*4;
+              score+=(pixels[to]-pixels[co]).abs()+(pixels[to+1]-pixels[co+1]).abs()+(pixels[to+2]-pixels[co+2]).abs();
+              samples++;
+            }
+            if(samples>0&&score/samples<bestScore){bestScore=score/samples;bestIndex=candidate;}
+          }
         }
-        if(tx>0)addKnown(target-1);
-        if(tx+1<width)addKnown(target+1);
-        if(ty>0)addKnown(target-width);
-        if(ty+1<height)addKnown(target+width);
-        if(n==0)return;
         final offset=target*4;
-        pixels[offset]=(r/n).round();pixels[offset+1]=(g/n).round();pixels[offset+2]=(b/n).round();pixels[offset+3]=(a/n).round();
+        if(bestIndex>=0){
+          final source=bestIndex*4;
+          pixels[offset]=pixels[source];pixels[offset+1]=pixels[source+1];pixels[offset+2]=pixels[source+2];pixels[offset+3]=pixels[source+3];
+        }else{
+          var r=0,g=0,b=0,a=0,n=0;
+          for(final neighbor in [tx>0?target-1:-1,tx+1<width?target+1:-1,ty>0?target-width:-1,ty+1<height?target+width:-1]){
+            if(neighbor<0||known[neighbor]==0)continue;
+            final no=neighbor*4;r+=pixels[no];g+=pixels[no+1];b+=pixels[no+2];a+=pixels[no+3];n++;
+          }
+          if(n==0)return;
+          pixels[offset]=(r/n).round();pixels[offset+1]=(g/n).round();pixels[offset+2]=(b/n).round();pixels[offset+3]=(a/n).round();
+        }
         known[target]=1;
         queue[tail++]=target;
       }
@@ -206,7 +225,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       _maskStrokes.clear();
     });
     await _save();
-    if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Quick inpaint completed. This uses edge-colour propagation, so complex backgrounds may need manual cleanup.')));
+    if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Patch-based inpaint completed. It copies matching local image texture; it does not understand object semantics, so complex scenes may need manual cleanup.')));
   }
 
   Future<void> _exportRigAnimation() async {
