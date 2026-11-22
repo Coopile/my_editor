@@ -827,6 +827,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   final List<AudioTrack> _audioTracks = [];
   final List<List<Layer>> _undoStack = [];
   final List<List<Layer>> _redoStack = [];
+  bool _gestureUndoOpen = false;
   final Set<int> _multiSelection = <int>{};
   bool _multiSelectMode = false;
   int? _sel;
@@ -1104,6 +1105,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }
 
   void _undo() {
+    _gestureUndoOpen = false;
     if (_undoStack.isEmpty) return;
     _redoStack.add(_layerSnapshot());
     final previous = _undoStack.removeLast();
@@ -1116,6 +1118,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }
 
   void _redo() {
+    _gestureUndoOpen = false;
     if (_redoStack.isEmpty) return;
     _undoStack.add(_layerSnapshot());
     final next = _redoStack.removeLast();
@@ -1132,8 +1135,18 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     _inspectorSheetSetState?.call(() {});
   }
 
-  void _ed(Layer l, VoidCallback f) {
+  void _beginGestureUndo() {
+    if (_gestureUndoOpen) return;
     _pushUndo();
+    _gestureUndoOpen = true;
+  }
+
+  void _endGestureUndo() {
+    _gestureUndoOpen = false;
+  }
+
+  void _ed(Layer l, VoidCallback f) {
+    if (!_gestureUndoOpen) _pushUndo();
     setState(() {
       f();
       if (l.kfs.isNotEmpty) l.upsert(_ms);
@@ -2356,7 +2369,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       child: GestureDetector(
         onTap: () => setState(() => _sel = i),
         onDoubleTap: () => setState(() { _sel = i; _pivotMode = !_pivotMode; }),
+        onPanStart: (_) => _beginGestureUndo(),
         onPanUpdate: (d) => _ed(l, () { _sel = i; l.pos += d.delta; }),
+        onPanEnd: (_) => _endGestureUndo(),
+        onPanCancel: _endGestureUndo,
         child: Opacity(
           opacity: visualOpacity.clamp(0, 1).toDouble(),
           child: Transform(
