@@ -175,8 +175,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         final tx=target%width,ty=target~/width;
         var bestScore=double.infinity,bestIndex=-1;
         const patchRadius=1,searchRadius=32,searchStep=4;
-        for(var sy=math.max(patchRadius,ty-searchRadius);sy<math.min(height-patchRadius,ty+searchRadius);sy+=searchStep){
-          for(var sx=math.max(patchRadius,tx-searchRadius);sx<math.min(width-patchRadius,tx+searchRadius);sx+=searchStep){
+        for(var sy=math.max(patchRadius,ty-searchRadius).toInt();sy<math.min(height-patchRadius,ty+searchRadius);sy+=searchStep){
+          for(var sx=math.max(patchRadius,tx-searchRadius).toInt();sx<math.min(width-patchRadius,tx+searchRadius);sx+=searchStep){
             final candidate=sy*width+sx;
             if(mask[candidate]==1)continue;
             var score=0.0,samples=0;
@@ -185,6 +185,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
               if(nx<0||ny<0||nx>=width||ny>=height||cx<0||cy<0||cx>=width||cy>=height)continue;
               final targetNeighbor=ny*width+nx,candidateNeighbor=cy*width+cx;
               if(mask[targetNeighbor]==1||known[targetNeighbor]==0)continue;
+              if(mask[candidateNeighbor]==1)continue;
               final to=targetNeighbor*4,co=candidateNeighbor*4;
               score+=(pixels[to]-pixels[co]).abs()+(pixels[to+1]-pixels[co+1]).abs()+(pixels[to+2]-pixels[co+2]).abs();
               samples++;
