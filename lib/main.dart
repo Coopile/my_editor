@@ -2034,14 +2034,37 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         final text = _filterText(layer.text);
         final textAlpha = layer.opacity.clamp(0.0, 1.0).toDouble();
         final textFx = fxLibrary[layer.fx].$1;
-        final textX = textFx == 'Shake'
-            ? '\'' + x.toString() + '+sin(t*' + (32 * layer.fxSpeed).toStringAsFixed(2) +
-                ')*' + (10 * layer.fxStrength).toStringAsFixed(2) + '\''
-            : x.toString();
-        final textY = textFx == 'Shake'
-            ? '\'' + y.toString() + '+cos(t*' + (27 * layer.fxSpeed).toStringAsFixed(2) +
-                ')*' + (7 * layer.fxStrength).toStringAsFixed(2) + '\''
-            : y.toString();
+        final textXTerms = <String>[];
+        final textYTerms = <String>[];
+        if (textFx == 'Shake') {
+          textXTerms.add('sin(t*' + (32 * layer.fxSpeed).toStringAsFixed(2) + ')*' + (10 * layer.fxStrength).toStringAsFixed(2));
+          textYTerms.add('cos(t*' + (27 * layer.fxSpeed).toStringAsFixed(2) + ')*' + (7 * layer.fxStrength).toStringAsFixed(2));
+        }
+        for (final clip in layer.mangaEffects) {
+          final clipStart = (clip.start * totalDuration - trimStart).clamp(0.0, clipDuration);
+          final clipEnd = (clip.end * totalDuration - trimStart).clamp(0.0, clipDuration);
+          if (clipEnd <= clipStart) continue;
+          final active = 'between(t,' + clipStart.toStringAsFixed(3) + ',' + clipEnd.toStringAsFixed(3) + ')';
+          final strength = _mangaClipStrengthExpression(clip, totalDuration, trimStart);
+          switch (clip.name.toLowerCase()) {
+            case 'shake':
+            case 'drift':
+            case 'twitch':
+              final frequency = clip.name.toLowerCase() == 'twitch' ? 48 : 9;
+              textXTerms.add('if(' + active + ',sin(t*' + frequency.toString() + ')*' + (12 * strength).toStringAsFixed(2) + ',0)');
+              textYTerms.add('if(' + active + ',cos(t*' + frequency.toString() + ')*' + (8 * strength).toStringAsFixed(2) + ',0)');
+              break;
+            case 'pulse':
+            case 'bounce':
+              textYTerms.add('if(' + active + ',sin(t*11)*' + (9 * strength).toStringAsFixed(2) + ',0)');
+              break;
+            case 'impact':
+              textYTerms.add('if(' + active + ',if(lt(mod(t-' + clipStart.toStringAsFixed(3) + ',0.5),0.08),-' + (7 * strength).toStringAsFixed(2) + ',0),0)');
+              break;
+          }
+        }
+        final textX = textXTerms.isEmpty ? x.toString() : "'" + x.toString() + '+' + textXTerms.join('+') + "'";
+        final textY = textYTerms.isEmpty ? y.toString() : "'" + y.toString() + '+' + textYTerms.join('+') + "'";
         final alpha = textFx == 'Flash'
             ? ':alpha=\'if(lt(mod(t,0.5),0.08),1,' + textAlpha.toStringAsFixed(3) + ')\''
             : '';
