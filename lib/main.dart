@@ -1800,14 +1800,14 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   String _mangaClipStrengthExpression(MangaCutEffectClip clip,double totalDuration,double trimStart){
     final frames=clip.strengthKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
     if(frames.isEmpty)return clip.strength.toStringAsFixed(4);
-    final timeExpr='((t+\${trimStart.toStringAsFixed(4)})/\${math.max(.001,totalDuration).toStringAsFixed(4)})';
+    final timeExpr='((t+${trimStart.toStringAsFixed(4)})/${math.max(.001,totalDuration).toStringAsFixed(4)})';
     var expression=frames.last.value.toStringAsFixed(4);
     for(var i=frames.length-2;i>=0;i--){
       final a=frames[i],b=frames[i+1];
-      final segment='(\${a.value.toStringAsFixed(4)}+(\${(b.value-a.value).toStringAsFixed(4)})*(($timeExpr-\${a.key.toStringAsFixed(6)})/\${(b.key-a.key).toStringAsFixed(6)}))';
-      expression='if(lt($timeExpr,\${b.key.toStringAsFixed(6)}),$segment,$expression)';
+      final segment='(${a.value.toStringAsFixed(4)}+(${(b.value-a.value).toStringAsFixed(4)})*(($timeExpr-${a.key.toStringAsFixed(6)})/${(b.key-a.key).toStringAsFixed(6)}))';
+      expression='if(lt($timeExpr,${b.key.toStringAsFixed(6)}),$segment,$expression)';
     }
-    expression='if(lt($timeExpr,\${frames.first.key.toStringAsFixed(6)}),\${frames.first.value.toStringAsFixed(4)},$expression)';
+    expression='if(lt($timeExpr,${frames.first.key.toStringAsFixed(6)}),${frames.first.value.toStringAsFixed(4)},$expression)';
     return expression;
   }
 
