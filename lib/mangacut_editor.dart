@@ -61,10 +61,10 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       _effects..clear()..addAll((j['effects'] as List? ?? []).map((v)=>_EffectClip.fromJson(Map<String,dynamic>.from(v))));
       _time=(j['time'] as num?)?.toInt() ?? 0;
       _sourceImagePath=j['sourceImagePath'] as String?;
-    }); } catch(_){}
+    }); if(_sourceImagePath!=null){try{final bytes=await File(_sourceImagePath!).readAsBytes();final decoded=await _decodeImage(bytes);if(mounted)setState(()=>_sourceImage=decoded);}catch(_){}} } catch(_){}
   }
   Future<ui.Image> _decodeImage(Uint8List bytes) async { final codec=await ui.instantiateImageCodec(bytes); final frame=await codec.getNextFrame(); return frame.image; }
-  Future<void> _pickSourceImage() async { final picked=await ImagePicker().pickImage(source:ImageSource.gallery,imageQuality:95); if(picked==null)return; final bytes=await picked.readAsBytes(); final decoded=await _decodeImage(bytes); if(!mounted)return; setState((){_sourceImage=decoded;_sourceImagePath=picked.path;_maskStrokes.clear();_liquifyStrokes.clear();}); await _save(); }
+  Future<void> _pickSourceImage() async { final picked=await ImagePicker().pickImage(source:ImageSource.gallery,imageQuality:95); if(picked==null)return; final docs=await getApplicationDocumentsDirectory(); final ext=picked.path.contains('.')?picked.path.substring(picked.path.lastIndexOf('.')):'.png'; final saved=await File(picked.path).copy('${docs.path}/manga_${widget.projectId}$ext'); final bytes=await saved.readAsBytes(); final decoded=await _decodeImage(bytes); if(!mounted)return; setState((){_sourceImage=decoded;_sourceImagePath=saved.path;_maskStrokes.clear();_liquifyStrokes.clear();}); await _save(); }
   Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath})); }
   void _changed(){setState((){});_save();}
   void _addBone(){
