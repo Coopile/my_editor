@@ -2052,7 +2052,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
             case 'twitch':
               final frequency = clip.name.toLowerCase() == 'twitch' ? 48 : 9;
               textXTerms.add('if(' + active + ',sin(t*' + frequency.toString() + ')*' + '(12*' + strength + ')' + ',0)');
-              textYTerms.add('if(' + active + ',cos(t*' + frequency.toString() + ')*' + (8 * strength).toStringAsFixed(2) + ',0)');
+              textYTerms.add('if(' + active + ',cos(t*' + frequency.toString() + ')*' + '(8*' + strength + ')' + ',0)');
               break;
             case 'pulse':
             case 'bounce':
