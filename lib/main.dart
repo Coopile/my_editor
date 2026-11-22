@@ -541,7 +541,7 @@ class Layer {
       ..mesh = List.of(mesh)
       ..kfs = kfs.map((k) => KF(k.t, k.pos, k.scale, k.rot, k.opacity)).toList()
       ..effectKfs = effectKfs.map((k) => EffectKF(k.t, k.strength, k.speed)).toList()
-      ..mangaEffects = mangaEffects.map((e) => MangaCutEffectClip(e.id,e.name,e.target,e.start,e.end,strength:e.strength,keys:List<int>.of(e.keys))).toList();
+      ..mangaEffects = mangaEffects.map((e) => MangaCutEffectClip(e.id,e.name,e.target,e.start,e.end,strength:e.strength,keys:List<int>.of(e.keys),strengthKeys:Map<double,double>.of(e.strengthKeys))).toList();
     return clone;
   }
 
@@ -1797,11 +1797,25 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     }
   }
 
+  String _mangaClipStrengthExpression(MangaCutEffectClip clip,double totalDuration,double trimStart){
+    final frames=clip.strengthKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
+    if(frames.isEmpty)return clip.strength.toStringAsFixed(4);
+    final timeExpr='((t+\${trimStart.toStringAsFixed(4)})/\${math.max(.001,totalDuration).toStringAsFixed(4)})';
+    var expression=frames.last.value.toStringAsFixed(4);
+    for(var i=frames.length-2;i>=0;i--){
+      final a=frames[i],b=frames[i+1];
+      final segment='(\${a.value.toStringAsFixed(4)}+(\${(b.value-a.value).toStringAsFixed(4)})*(($timeExpr-\${a.key.toStringAsFixed(6)})/\${(b.key-a.key).toStringAsFixed(6)}))';
+      expression='if(lt($timeExpr,\${b.key.toStringAsFixed(6)}),$segment,$expression)';
+    }
+    expression='if(lt($timeExpr,\${frames.first.key.toStringAsFixed(6)}),\${frames.first.value.toStringAsFixed(4)},$expression)';
+    return expression;
+  }
+
   String? _exportMangaClipFilter(MangaCutEffectClip clip,double totalDuration,double trimStart,double clipDuration){
     final start=(clip.start*totalDuration-trimStart).clamp(0.0,clipDuration).toStringAsFixed(3);
     final end=(clip.end*totalDuration-trimStart).clamp(0.0,clipDuration).toStringAsFixed(3);
     if(double.parse(end)<=double.parse(start))return null;
-    final strength=clip.strength.clamp(0.0,2.0).toDouble();
+    final strength=_mangaClipStrengthExpression(clip,totalDuration,trimStart);
     final enable=":enable='between(t,$start,$end)'";
     switch(clip.name.toLowerCase()){
       case 'shake':
@@ -2248,7 +2262,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         child = applyFx(
           clipFx,
           child,
-          strength: clip.strength,
+          strength: clip.strengthAt(currentSeconds / projectSeconds),
           speed: 1,
           time: _ms / 1000,
         );
@@ -3776,7 +3790,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       final index = _layers.indexWhere((layer) => layer.text == entry.key);
                       if (index < 0) continue;
                       final targetClips = entry.value;
-                      _layers[index].mangaEffects = targetClips.map((clip)=>MangaCutEffectClip(clip.id,clip.name,clip.target,clip.start,clip.end,strength:clip.strength,keys:List<int>.of(clip.keys))).toList();
+                      _layers[index].mangaEffects = targetClips.map((clip)=>MangaCutEffectClip(clip.id,clip.name,clip.target,clip.start,clip.end,strength:clip.strength,keys:List<int>.of(clip.keys),strengthKeys:Map<double,double>.of(clip.strengthKeys))).toList();
                       final clip = targetClips.last;
                       final mappedName = switch (clip.name.toLowerCase()) {
                         'pulse' || 'bounce' => 'Zoom Pulse',
