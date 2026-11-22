@@ -13,7 +13,8 @@ class MangaCutEditor extends StatefulWidget {
   final String projectId;
   final String projectName;
   final List<String> layerNames;
-  const MangaCutEditor({super.key, required this.projectId, required this.projectName, required this.layerNames});
+  final ValueChanged<List<MangaCutEffectClip>>? onApplyEffects;
+  const MangaCutEditor({super.key, required this.projectId, required this.projectName, required this.layerNames, this.onApplyEffects});
 
   @override
   State<MangaCutEditor> createState() => _MangaCutEditorState();
@@ -30,19 +31,19 @@ class _RigBone {
   factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())));
 }
 
-class _EffectClip {
+class MangaCutEffectClip {
   String id, name, target;
   double start, end, strength;
   List<int> keys;
-  _EffectClip(this.id,this.name,this.target,this.start,this.end,{this.strength=1,List<int>? keys}) : keys=keys ?? [];
+  MangaCutEffectClip(this.id,this.name,this.target,this.start,this.end,{this.strength=1,List<int>? keys}) : keys=keys ?? [];
   Map<String,dynamic> toJson()=>{'id':id,'name':name,'target':target,'start':start,'end':end,'strength':strength,'keys':keys};
-  factory _EffectClip.fromJson(Map<String,dynamic> j)=>_EffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>());
+  factory MangaCutEffectClip.fromJson(Map<String,dynamic> j)=>MangaCutEffectClip(j['id'],j['name'],j['target'],(j['start'] as num).toDouble(),(j['end'] as num).toDouble(),strength:(j['strength'] as num?)?.toDouble() ?? 1,keys:(j['keys'] as List? ?? []).cast<int>());
 }
 
 class _MangaCutEditorState extends State<MangaCutEditor> {
   static const _bg=Color(0xFF101116), _panel=Color(0xFF1A1C24), _accent=Color(0xFF8A68FF);
   final List<_RigBone> _bones=[];
-  final List<_EffectClip> _effects=[];
+  final List<MangaCutEffectClip> _effects=[];
   final List<List<Offset>> _maskStrokes=[];
   final List<List<Offset>> _liquifyStrokes=[];
   ui.Image? _sourceImage;
@@ -66,7 +67,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     final p=await SharedPreferences.getInstance(); final raw=p.getString(_storageKey); if(raw==null)return;
     try { final j=jsonDecode(raw) as Map<String,dynamic>; if(!mounted)return; setState((){
       _bones..clear()..addAll((j['bones'] as List? ?? []).map((v)=>_RigBone.fromJson(Map<String,dynamic>.from(v))));
-      _effects..clear()..addAll((j['effects'] as List? ?? []).map((v)=>_EffectClip.fromJson(Map<String,dynamic>.from(v))));
+      _effects..clear()..addAll((j['effects'] as List? ?? []).map((v)=>MangaCutEffectClip.fromJson(Map<String,dynamic>.from(v))));
       _time=(j['time'] as num?)?.toInt() ?? 0;
       _sourceImagePath=j['sourceImagePath'] as String?;
       _maskStrokes..clear()..addAll((j['maskStrokes'] as List? ?? []).map((stroke)=>(stroke as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList()));
@@ -83,7 +84,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     _selectedBone=_bones.length-1;_changed();
   }
   void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
-  void _addEffect(String name){final e=_EffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
+  void _addEffect(String name){final e=MangaCutEffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
   void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();}_changed();}
   double _rotationAt(_RigBone bone,int time){final frames=bone.rotationKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));if(frames.isEmpty)return bone.rotation;if(time<=frames.first.key)return frames.first.value;if(time>=frames.last.key)return frames.last.value;for(var i=1;i<frames.length;i++){if(time<=frames[i].key){final a=frames[i-1],b=frames[i];final t=(time-a.key)/(b.key-a.key);return a.value+(b.value-a.value)*t;}}return bone.rotation;}
   void _togglePlayback(){if(_playing){_playTimer?.cancel();_playTimer=null;setState(()=>_playing=false);_save();return;}if(_time>=_duration)_time=0;setState(()=>_playing=true);_playTimer=Timer.periodic(const Duration(milliseconds:16),(timer){if(!mounted){timer.cancel();return;}final next=_time+16;if(next>=_duration){_time=_duration;timer.cancel();_playTimer=null;_playing=false;}else{_time=next;}for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}setState((){});});}
@@ -133,7 +134,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   void _timelinePanEnd(){_timelineDragKind='';_timelineDragIndex=-1;_timelineDragKey=-1;_save();}
   @override
   Widget build(BuildContext context){
-    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace')]),
+    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace'),IconButton(onPressed:(){widget.onApplyEffects?.call(List.unmodifiable(_effects));Navigator.of(context).pop();},icon:const Icon(Icons.check_circle_outline),tooltip:'Apply effects to main editor')]),
       body:SafeArea(child:Column(children:[
         _topTabs(),
         Expanded(child:Row(children:[
@@ -188,7 +189,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
 }
 
 class _RigPainter extends CustomPainter {
-  final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks,liquify; final List<_EffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
+  final List<_RigBone> bones; final int selected,tab,time,duration; final List<List<Offset>> masks,liquify; final List<MangaCutEffectClip> effects; final double brush,strength; final ui.Image? sourceImage;
   _RigPainter(this.bones,this.selected,this.masks,this.liquify,this.tab,this.brush,this.strength,this.sourceImage,this.time,this.duration,this.effects);
   @override void paint(Canvas c,Size s){
     final bg=Paint()..color=const Color(0xFF171A22);c.drawRect(Offset.zero & s,bg);
@@ -319,7 +320,7 @@ class _RigPainter extends CustomPainter {
   @override bool shouldRepaint(covariant _RigPainter old)=>true;
 }
 class _StudioTimelinePainter extends CustomPainter{
-  final List<_RigBone> bones;final List<_EffectClip> effects;final int time,duration;
+  final List<_RigBone> bones;final List<MangaCutEffectClip> effects;final int time,duration;
   _StudioTimelinePainter(this.bones,this.effects,this.time,this.duration);
   @override void paint(Canvas c,Size s){
     final row=math.max(22.0,s.height/(bones.length+effects.length+1)).toDouble();final line=Paint()..color=Colors.white12;
