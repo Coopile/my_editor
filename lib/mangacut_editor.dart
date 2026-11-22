@@ -29,9 +29,10 @@ class _RigBone {
   final Map<int,double> rotationKeys;
   final Map<int,String> easingKeys;
   final Map<int,double> overshootKeys;
-  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys, Map<int,String>? easingKeys, Map<int,double>? overshootKeys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {}, easingKeys = easingKeys ?? {}, overshootKeys = overshootKeys ?? {};
-  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v)),'easingKeys':easingKeys.map((k,v)=>MapEntry(k.toString(),v)),'overshootKeys':overshootKeys.map((k,v)=>MapEntry(k.toString(),v))};
-  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),easingKeys:(j['easingKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),v.toString())),overshootKeys:(j['overshootKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())));
+  final Map<int,Offset> curveHandle1Keys,curveHandle2Keys;
+  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys, Map<int,String>? easingKeys, Map<int,double>? overshootKeys, Map<int,Offset>? curveHandle1Keys, Map<int,Offset>? curveHandle2Keys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {}, easingKeys = easingKeys ?? {}, overshootKeys = overshootKeys ?? {}, curveHandle1Keys=curveHandle1Keys??{},curveHandle2Keys=curveHandle2Keys??{};
+  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v)),'easingKeys':easingKeys.map((k,v)=>MapEntry(k.toString(),v)),'overshootKeys':overshootKeys.map((k,v)=>MapEntry(k.toString(),v)),'curveHandle1Keys':curveHandle1Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy])),'curveHandle2Keys':curveHandle2Keys.map((k,v)=>MapEntry(k.toString(),[v.dx,v.dy]))};
+  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),easingKeys:(j['easingKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),v.toString())),overshootKeys:(j['overshootKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())),curveHandle1Keys:(j['curveHandle1Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))),curveHandle2Keys:(j['curveHandle2Keys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),Offset((v[0] as num).toDouble(),(v[1] as num).toDouble()))));
 }
 
 class MangaCutEffectClip {
@@ -209,9 +210,25 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         final c1=1.70158*(amount/.18);final c3=c1+1;
         value=1+c3*math.pow(t-1,3).toDouble()+c1*math.pow(t-1,2).toDouble();
         break;
+      case 'Custom':
+        value=_bezierProgress(t,bone.curveHandle1Keys[segmentStart]??const Offset(.42,0),bone.curveHandle2Keys[segmentStart]??const Offset(.58,1));
+        break;
       default: value=t;
     }
     return value;
+  }
+  double _bezierCoordinate(double p1,double p2,double t){
+    final u=1-t;
+    return 3*u*u*t*p1+3*u*t*t*p2+t*t*t;
+  }
+  double _bezierProgress(double x,Offset first,Offset second){
+    var low=0.0,high=1.0,t=x.clamp(0.0,1.0).toDouble();
+    for(var i=0;i<16;i++){
+      final current=_bezierCoordinate(first.dx,second.dx,t);
+      if(current<x)low=t;else high=t;
+      t=(low+high)/2;
+    }
+    return _bezierCoordinate(first.dy,second.dy,t);
   }
   double _rotationAt(_RigBone bone,int time){
     final frames=bone.rotationKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));
@@ -237,15 +254,24 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     final segment=starts.isEmpty?bone.rotationKeys.keys.reduce((a,b)=>a<b?a:b):starts.last;
     var mode=bone.easingKeys[segment]??'Linear';
     var amount=bone.overshootKeys[segment]??.18;
+    var handle1=bone.curveHandle1Keys[segment]??const Offset(.42,0);
+    var handle2=bone.curveHandle2Keys[segment]??const Offset(.58,1);
     await showDialog<void>(context:context,builder:(dialogContext)=>StatefulBuilder(builder:(context,setDialogState)=>AlertDialog(
       backgroundColor:_panel,
       title:Text('Motion curve · ${bone.name}'),
       content:SizedBox(width:360,child:Column(mainAxisSize:MainAxisSize.min,children:[
-        DropdownButtonFormField<String>(value:mode,decoration:const InputDecoration(labelText:'Interpolation'),items:const ['Linear','Ease In','Ease Out','Ease In Out','Overshoot'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setDialogState(()=>mode=v??mode)),
+        DropdownButtonFormField<String>(value:mode,decoration:const InputDecoration(labelText:'Interpolation'),items:const ['Linear','Ease In','Ease Out','Ease In Out','Overshoot','Custom'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v)=>setDialogState(()=>mode=v??mode)),
         if(mode=='Overshoot')Column(children:[const SizedBox(height:12),Text('Overshoot amount · ${amount.toStringAsFixed(2)}'),Slider(value:amount,min:0,max:.6,onChanged:(v)=>setDialogState(()=>amount=v))]),
-        const SizedBox(height:12),SizedBox(height:110,width:300,child:CustomPaint(painter:_CurvePreviewPainter(mode,amount))),
+        if(mode=='Custom')...[
+          const SizedBox(height:8),
+          _slider('Handle 1 X',handle1.dx,0,1,(v)=>setDialogState(()=>handle1=Offset(v,handle1.dy))),
+          _slider('Handle 1 Y',handle1.dy,0,1,(v)=>setDialogState(()=>handle1=Offset(handle1.dx,v))),
+          _slider('Handle 2 X',handle2.dx,0,1,(v)=>setDialogState(()=>handle2=Offset(v,handle2.dy))),
+          _slider('Handle 2 Y',handle2.dy,0,1,(v)=>setDialogState(()=>handle2=Offset(handle2.dx,v))),
+        ],
+        const SizedBox(height:12),SizedBox(height:110,width:300,child:CustomPaint(painter:_CurvePreviewPainter(mode,amount,handle1,handle2))),
       ])),
-      actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Cancel')),FilledButton(onPressed:(){bone.easingKeys[segment]=mode;bone.overshootKeys[segment]=amount;_changed();Navigator.pop(dialogContext);},child:const Text('Apply curve'))],
+      actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Cancel')),FilledButton(onPressed:(){bone.easingKeys[segment]=mode;bone.overshootKeys[segment]=amount;bone.curveHandle1Keys[segment]=handle1;bone.curveHandle2Keys[segment]=handle2;_changed();Navigator.pop(dialogContext);},child:const Text('Apply curve'))],
     )));
   }
   void _togglePlayback(){if(_playing){_playTimer?.cancel();_playTimer=null;setState(()=>_playing=false);_save();return;}if(_time>=_duration)_time=0;setState(()=>_playing=true);_playTimer=Timer.periodic(const Duration(milliseconds:16),(timer){if(!mounted){timer.cancel();return;}final next=_time+16;if(next>=_duration){_time=_duration;timer.cancel();_playTimer=null;_playing=false;}else{_time=next;}for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}setState((){});});}
@@ -508,8 +534,8 @@ class _RigPainter extends CustomPainter {
   @override bool shouldRepaint(covariant _RigPainter old)=>true;
 }
 class _CurvePreviewPainter extends CustomPainter {
-  final String mode;final double overshoot;
-  _CurvePreviewPainter(this.mode,this.overshoot);
+  final String mode;final double overshoot;final Offset handle1,handle2;
+  _CurvePreviewPainter(this.mode,this.overshoot,this.handle1,this.handle2);
   @override void paint(Canvas canvas,Size size){
     final grid=Paint()..color=Colors.white24..strokeWidth=1;
     canvas.drawLine(Offset(0,size.height),Offset(size.width,size.height),grid);
@@ -522,13 +548,18 @@ class _CurvePreviewPainter extends CustomPainter {
         case 'Ease Out':v=1-math.pow(1-t,3).toDouble();break;
         case 'Ease In Out':v=t<.5?4*t*t*t:1-math.pow(-2*t+2,3).toDouble()/2;break;
         case 'Overshoot':final c1=1.70158*(overshoot/.18);final c3=c1+1;v=1+c3*math.pow(t-1,3).toDouble()+c1*math.pow(t-1,2).toDouble();break;
+        case 'Custom':
+          var low=0.0,high=1.0,u=t;
+          for(var j=0;j<16;j++){final x=3*(1-u)*(1-u)*u*handle1.dx+3*(1-u)*u*u*handle2.dx+u*u*u;if(x<t)low=u;else high=u;u=(low+high)/2;}
+          v=3*(1-u)*(1-u)*u*handle1.dy+3*(1-u)*u*u*handle2.dy+u*u*u;
+          break;
       }
       final point=Offset(t*size.width,size.height-v*size.height);
       if(i==0)path.moveTo(point.dx,point.dy);else path.lineTo(point.dx,point.dy);
     }
     canvas.drawPath(path,Paint()..color=const Color(0xFF8A68FF)..style=PaintingStyle.stroke..strokeWidth=3);
   }
-  @override bool shouldRepaint(covariant _CurvePreviewPainter old)=>old.mode!=mode||old.overshoot!=overshoot;
+  @override bool shouldRepaint(covariant _CurvePreviewPainter old)=>old.mode!=mode||old.overshoot!=overshoot||old.handle1!=handle1||old.handle2!=handle2;
 }
 class _StudioTimelinePainter extends CustomPainter{
   final List<_RigBone> bones;final List<MangaCutEffectClip> effects;final int time,duration;
