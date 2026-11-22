@@ -371,12 +371,9 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         if(mode=='Overshoot')Column(children:[const SizedBox(height:12),Text('Overshoot amount · ${amount.toStringAsFixed(2)}'),Slider(value:amount,min:0,max:.6,onChanged:(v)=>setDialogState(()=>amount=v))]),
         if(mode=='Custom')...[
           const SizedBox(height:8),
-          _slider('Handle 1 X',handle1.dx,0,1,(v)=>setDialogState(()=>handle1=Offset(v,handle1.dy))),
-          _slider('Handle 1 Y',handle1.dy,0,1,(v)=>setDialogState(()=>handle1=Offset(handle1.dx,v))),
-          _slider('Handle 2 X',handle2.dx,0,1,(v)=>setDialogState(()=>handle2=Offset(v,handle2.dy))),
-          _slider('Handle 2 Y',handle2.dy,0,1,(v)=>setDialogState(()=>handle2=Offset(handle2.dx,v))),
+          const Text('Drag either control point on the graph to shape the curve.',style:TextStyle(fontSize:11,color:Colors.white60)),
         ],
-        const SizedBox(height:12),SizedBox(height:110,width:300,child:CustomPaint(painter:_CurvePreviewPainter(mode,amount,handle1,handle2))),
+        const SizedBox(height:12),SizedBox(height:150,width:320,child:GestureDetector(onPanDown:(d){if(mode!='Custom')return;final p=Offset((d.localPosition.dx/320).clamp(0.0,1.0),(1-d.localPosition.dy/150).clamp(0.0,1.0));setDialogState((){if((p-handle1).distance<(p-handle2).distance){handle1=p;}else{handle2=p;}});},onPanUpdate:(d){if(mode!='Custom')return;final p=Offset((d.localPosition.dx/320).clamp(0.0,1.0),(1-d.localPosition.dy/150).clamp(0.0,1.0));setDialogState((){if((p-handle1).distance<(p-handle2).distance){handle1=p;}else{handle2=p;}});},child:CustomPaint(painter:_CurvePreviewPainter(mode,amount,handle1,handle2)))),
       ])),
       actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Cancel')),FilledButton(onPressed:(){bone.easingKeys[segment]=mode;bone.overshootKeys[segment]=amount;bone.curveHandle1Keys[segment]=handle1;bone.curveHandle2Keys[segment]=handle2;_changed();Navigator.pop(dialogContext);},child:const Text('Apply curve'))],
     )));
@@ -478,7 +475,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         _maskStrokes..clear()..addAll(remaining);
       });
     }else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
-    onPanEnd:(d){if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?0.0:1.0));_activeWeightStroke.clear();});_save();}},
+    onPanEnd:(d){if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?-1.0:1.0));_activeWeightStroke.clear();});_save();}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -583,7 +580,7 @@ class _RigPainter extends CustomPainter {
   }
   double _paintedWeight(String boneId,Offset point,Size size){
     var result=0.0;
-    for(final stroke in weights){if(stroke.boneId!=boneId||stroke.points.isEmpty)continue;final radius=stroke.radius*math.min(size.width,size.height);for(var i=0;i<math.max(1,stroke.points.length-1);i++){final a=Offset(stroke.points[i].dx*size.width,stroke.points[i].dy*size.height);final b=stroke.points.length==1?a:Offset(stroke.points[i+1].dx*size.width,stroke.points[i+1].dy*size.height);final ab=b-a;final denom=ab.dx*ab.dx+ab.dy*ab.dy;final t=denom==0?0.0:(((point-a).dx*ab.dx+(point-a).dy*ab.dy)/denom).clamp(0.0,1.0).toDouble();final distance=(point-(a+ab*t)).distance;if(distance<radius){final falloff=1-distance/radius;result=math.max(result,stroke.value*falloff*falloff*(3-2*falloff));}}}
+    for(final stroke in weights){if(stroke.boneId!=boneId||stroke.points.isEmpty)continue;final radius=stroke.radius*math.min(size.width,size.height);for(var i=0;i<math.max(1,stroke.points.length-1);i++){final a=Offset(stroke.points[i].dx*size.width,stroke.points[i].dy*size.height);final b=stroke.points.length==1?a:Offset(stroke.points[i+1].dx*size.width,stroke.points[i+1].dy*size.height);final ab=b-a;final denom=ab.dx*ab.dx+ab.dy*ab.dy;final t=denom==0?0.0:(((point-a).dx*ab.dx+(point-a).dy*ab.dy)/denom).clamp(0.0,1.0).toDouble();final distance=(point-(a+ab*t)).distance;if(distance<radius){final falloff=1-distance/radius;result+=stroke.value*falloff*falloff*(3-2*falloff);}}}
     return result.clamp(0.0,1.0).toDouble();
   }
   Offset _deformByBones(Offset point,Size size){
