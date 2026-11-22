@@ -175,7 +175,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         if(mask[target]==0||known[target]==1)return;
         final tx=target%width,ty=target~/width;
         var bestScore=double.infinity,bestIndex=-1;
-        const patchRadius=1,searchRadius=32,searchStep=4;
+        const patchRadius=1,searchRadius=32,searchStep=8;
         for(var sy=math.max(patchRadius,ty-searchRadius).toInt();sy<math.min(height-patchRadius,ty+searchRadius);sy+=searchStep){
           for(var sx=math.max(patchRadius,tx-searchRadius).toInt();sx<math.min(width-patchRadius,tx+searchRadius);sx+=searchStep){
             final candidate=sy*width+sx;
