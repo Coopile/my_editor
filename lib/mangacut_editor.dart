@@ -114,33 +114,35 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     final queue=<int>[];
     for(var y=0;y<height;y++)for(var x=0;x<width;x++){
       final index=y*width+x;
-      if(mask[index]==0)continue;
-      if((x>0&&known[index-1]==1)||(x+1<width&&known[index+1]==1)||(y>0&&known[index-width]==1)||(y+1<height&&known[index+width]==1)){
-        queue.add(index);
-      }
+      if(known[index]==0)continue;
+      if((x>0&&mask[index-1]==1)||(x+1<width&&mask[index+1]==1)||(y>0&&mask[index-width]==1)||(y+1<height&&mask[index+width]==1))queue.add(index);
     }
-    for(final index in queue)known[index]=2;
     var head=0;
     while(head<queue.length){
       final index=queue[head++],x=index%width,y=index~/width;
-      var r=0,g=0,b=0,a=0,n=0;
-      void addNeighbor(int neighbor){
-        if(known[neighbor]==0)return;
-        final offset=neighbor*4;
-        r+=pixels[offset];g+=pixels[offset+1];b+=pixels[offset+2];a+=pixels[offset+3];n++;
+      void fillNeighbor(int target){
+        if(mask[target]==0||known[target]==1)return;
+        final tx=target%width,ty=target~/width;
+        var r=0,g=0,b=0,a=0,n=0;
+        void addKnown(int neighbor){
+          if(known[neighbor]==0)return;
+          final offset=neighbor*4;
+          r+=pixels[offset];g+=pixels[offset+1];b+=pixels[offset+2];a+=pixels[offset+3];n++;
+        }
+        if(tx>0)addKnown(target-1);
+        if(tx+1<width)addKnown(target+1);
+        if(ty>0)addKnown(target-width);
+        if(ty+1<height)addKnown(target+width);
+        if(n==0)return;
+        final offset=target*4;
+        pixels[offset]=(r/n).round();pixels[offset+1]=(g/n).round();pixels[offset+2]=(b/n).round();pixels[offset+3]=(a/n).round();
+        known[target]=1;
+        queue.add(target);
       }
-      if(x>0)addNeighbor(index-1);
-      if(x+1<width)addNeighbor(index+1);
-      if(y>0)addNeighbor(index-width);
-      if(y+1<height)addNeighbor(index+width);
-      if(n==0)continue;
-      final offset=index*4;
-      pixels[offset]=(r/n).round();pixels[offset+1]=(g/n).round();pixels[offset+2]=(b/n).round();pixels[offset+3]=(a/n).round();
-      known[index]=1;
-      if(x>0&&mask[index-1]==1&&known[index-1]==0){known[index-1]=2;queue.add(index-1);}
-      if(x+1<width&&mask[index+1]==1&&known[index+1]==0){known[index+1]=2;queue.add(index+1);}
-      if(y>0&&mask[index-width]==1&&known[index-width]==0){known[index-width]=2;queue.add(index-width);}
-      if(y+1<height&&mask[index+width]==1&&known[index+width]==0){known[index+width]=2;queue.add(index+width);}
+      if(x>0)fillNeighbor(index-1);
+      if(x+1<width)fillNeighbor(index+1);
+      if(y>0)fillNeighbor(index-width);
+      if(y+1<height)fillNeighbor(index+width);
     }
     final completer=Completer<ui.Image>();
     ui.decodeImageFromPixels(pixels,width,height,ui.PixelFormat.rgba8888,completer.complete);
