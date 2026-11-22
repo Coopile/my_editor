@@ -61,11 +61,13 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       _effects..clear()..addAll((j['effects'] as List? ?? []).map((v)=>_EffectClip.fromJson(Map<String,dynamic>.from(v))));
       _time=(j['time'] as num?)?.toInt() ?? 0;
       _sourceImagePath=j['sourceImagePath'] as String?;
+      _maskStrokes..clear()..addAll((j['maskStrokes'] as List? ?? []).map((stroke)=>(stroke as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList()));
+      _liquifyStrokes..clear()..addAll((j['liquifyStrokes'] as List? ?? []).map((stroke)=>(stroke as List).map((p)=>Offset((p[0] as num).toDouble(),(p[1] as num).toDouble())).toList()));
     }); if(_sourceImagePath!=null){try{final bytes=await File(_sourceImagePath!).readAsBytes();final decoded=await _decodeImage(bytes);if(mounted)setState(()=>_sourceImage=decoded);}catch(_){}} } catch(_){}
   }
   Future<ui.Image> _decodeImage(Uint8List bytes) async { final codec=await ui.instantiateImageCodec(bytes); final frame=await codec.getNextFrame(); return frame.image; }
   Future<void> _pickSourceImage() async { final picked=await ImagePicker().pickImage(source:ImageSource.gallery,imageQuality:95); if(picked==null)return; final docs=await getApplicationDocumentsDirectory(); final ext=picked.path.contains('.')?picked.path.substring(picked.path.lastIndexOf('.')):'.png'; final saved=await File(picked.path).copy('${docs.path}/manga_${widget.projectId}$ext'); final bytes=await saved.readAsBytes(); final decoded=await _decodeImage(bytes); if(!mounted)return; setState((){_sourceImage=decoded;_sourceImagePath=saved.path;_maskStrokes.clear();_liquifyStrokes.clear();}); await _save(); }
-  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath})); }
+  Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList()})); }
   void _changed(){setState((){});_save();}
   void _addBone(){
     final n=_bones.length+1; final x=.28+(n%3)*.16, y=.28+(n%4)*.11;
@@ -102,7 +104,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       }
     },
     onPanStart:(d){if(_tab==1||_tab==2){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).add([p]));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);final b=_bones[_selectedBone];_dragBoneEnd=(b.a-p).distance<(b.b-p).distance?0:1;}},
-    onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
+    onPanUpdate:(d){if(_tab==1||_tab==2){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -156,7 +158,7 @@ class _RigPainter extends CustomPainter {
       for(var x=0;x<=cols;x++){
         final u=x/cols,v=y/rows;
         var px=u*size.width,py=v*size.height;
-        if(tab==2){
+        {
           for(final stroke in liquify){
             for(var k=1;k<stroke.length;k++){
               final prev=stroke[k-1],cur=stroke[k];
