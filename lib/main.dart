@@ -3675,6 +3675,37 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                 projectId: widget.projectId,
                 projectName: widget.projectName,
                 layerNames: _layers.map((layer) => layer.text).toList(),
+                onApplyEffects: (clips) {
+                  if (!mounted) return;
+                  setState(() {
+                    final latestByTarget = <String, MangaCutEffectClip>{};
+                    for (final clip in clips) {
+                      latestByTarget[clip.target] = clip;
+                    }
+                    for (final entry in latestByTarget.entries) {
+                      final index = _layers.indexWhere((layer) => layer.text == entry.key);
+                      if (index < 0) continue;
+                      final clip = entry.value;
+                      final mappedName = switch (clip.name.toLowerCase()) {
+                        'pulse' || 'bounce' => 'Zoom Pulse',
+                        'oscillate' || 'wobble' || 'wind' || 'liquify' => 'Wave Warp',
+                        'swing' => 'Spin',
+                        'impact' => 'Flash',
+                        'drift' => 'Shake',
+                        'twitch' => 'Glitch',
+                        _ => clip.name,
+                      };
+                      final fxIndex = fxLibrary.indexWhere((effect) => effect.$1.toLowerCase() == mappedName.toLowerCase());
+                      if (fxIndex < 0) continue;
+                      _layers[index]
+                        ..fx = fxIndex
+                        ..fxStrength = clip.strength
+                        ..start = clip.start
+                        ..end = clip.end;
+                    }
+                  });
+                  _saveProject();
+                },
               ),
             )),
             icon: const Icon(Icons.animation_rounded, size: 20),
