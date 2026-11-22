@@ -402,7 +402,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         }
         _maskStrokes..clear()..addAll(remaining);
       });
-    }else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));setState(()=>_dragBoneEnd==0?_bones[_selectedBone].a=p:_bones[_selectedBone].b=p);}},
+    }else{setState(()=>((_tab==1)?_maskStrokes:_liquifyStrokes).last.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
