@@ -1803,6 +1803,10 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       case 'Shake':
       case 'Spin':
         return null;
+      case 'Wave Warp':
+        final amplitude = (8 * strength).toStringAsFixed(2);
+        final wavelength = (80 / strength.clamp(.25, 2)).toStringAsFixed(2);
+        return "geq=lum='lum(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cb='cb(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)':cr='cr(X+sin(Y/$wavelength+T*${2 * speed})*$amplitude,Y)'";
       case 'Scale Assist':
         return "scale=w='iw*(1+" + (0.028 * strength).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':h='ih*(1+" + (0.028 * strength).toStringAsFixed(4) + "*sin(t*2.4*" + speed.toStringAsFixed(2) + "))':eval=frame";
       case 'Zoom Pulse':
@@ -3688,7 +3692,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       final clip = entry.value;
                       final mappedName = switch (clip.name.toLowerCase()) {
                         'pulse' || 'bounce' => 'Zoom Pulse',
-                        'oscillate' || 'wobble' || 'wind' || 'liquify' => 'Wave Warp',
+                        'bend' || 'oscillate' || 'wobble' || 'wind' || 'liquify' => 'Wave Warp',
                         'swing' => 'Spin',
                         'impact' => 'Flash',
                         'drift' => 'Shake',
@@ -3699,9 +3703,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                       if (fxIndex < 0) continue;
                       _layers[index]
                         ..fx = fxIndex
-                        ..fxStrength = clip.strength
-                        ..start = clip.start
-                        ..end = clip.end;
+                        ..fxStrength = clip.strength;
                     }
                   });
                   _saveProject();
