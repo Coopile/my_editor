@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:io';
 import 'dart:typed_data';
@@ -22,9 +23,10 @@ class _RigBone {
   Offset a, b;
   double rotation;
   List<int> keys;
-  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys}) : keys = keys ?? [];
-  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys};
-  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>());
+  final Map<int,double> rotationKeys;
+  _RigBone(this.id, this.name, this.a, this.b, {this.parent = '', this.rotation = 0, List<int>? keys, Map<int,double>? rotationKeys}) : keys = keys ?? [], rotationKeys = rotationKeys ?? {};
+  Map<String,dynamic> toJson() => {'id':id,'name':name,'parent':parent,'a':[a.dx,a.dy],'b':[b.dx,b.dy],'rotation':rotation,'keys':keys,'rotationKeys':rotationKeys.map((k,v)=>MapEntry(k.toString(),v))};
+  factory _RigBone.fromJson(Map<String,dynamic> j) => _RigBone(j['id'],j['name'],Offset((j['a'][0] as num).toDouble(),(j['a'][1] as num).toDouble()),Offset((j['b'][0] as num).toDouble(),(j['b'][1] as num).toDouble()),parent:j['parent'] ?? '',rotation:(j['rotation'] as num?)?.toDouble() ?? 0,keys:(j['keys'] as List? ?? []).cast<int>(),rotationKeys:(j['rotationKeys'] as Map? ?? {}).map((k,v)=>MapEntry(int.parse(k.toString()),(v as num).toDouble())));
 }
 
 class _EffectClip {
@@ -49,6 +51,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   double _brush=28, _strength=.55;
   String _target='';
   bool _playing=false, _maskErase=false;
+  Timer? _playTimer;
   int _dragBoneEnd=0;
   String get _storageKey=>'mangacut.workspace.${widget.projectId}';
 
@@ -76,7 +79,10 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   }
   void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
   void _addEffect(String name){final e=_EffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
-  void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();}_changed();}
+  void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();}_changed();}
+  double _rotationAt(_RigBone bone,int time){final frames=bone.rotationKeys.entries.toList()..sort((a,b)=>a.key.compareTo(b.key));if(frames.isEmpty)return bone.rotation;if(time<=frames.first.key)return frames.first.value;if(time>=frames.last.key)return frames.last.value;for(var i=1;i<frames.length;i++){if(time<=frames[i].key){final a=frames[i-1],b=frames[i];final t=(time-a.key)/(b.key-a.key);return a.value+(b.value-a.value)*t;}}return bone.rotation;}
+  void _togglePlayback(){if(_playing){_playTimer?.cancel();_playTimer=null;setState(()=>_playing=false);_save();return;}if(_time>=_duration)_time=0;setState(()=>_playing=true);_playTimer=Timer.periodic(const Duration(milliseconds:16),(timer){if(!mounted){timer.cancel();return;}final next=_time+16;if(next>=_duration){_time=_duration;timer.cancel();_playTimer=null;_playing=false;}else{_time=next;}for(final bone in _bones){bone.rotation=_rotationAt(bone,_time);}setState((){});});}
+  @override void dispose(){_playTimer?.cancel();_sourceImage?.dispose();super.dispose();}
   void _timelineTap(Offset p,double width){setState(()=>_time=(p.dx/width*_duration).round().clamp(0,_duration).toInt());}
   @override
   Widget build(BuildContext context){
@@ -108,7 +114,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush,_strength,_sourceImage)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
-    Row(children:[const Text('TIMELINE',style:TextStyle(fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1)),const Spacer(),Text('${(_time/1000).toStringAsFixed(2)}s',style:const TextStyle(color:Colors.white60,fontSize:11)),IconButton(onPressed:_addKey,icon:const Icon(Icons.add_box_outlined,size:19),tooltip:'Add keyframe'),IconButton(onPressed:()=>setState(()=>_playing=!_playing),icon:Icon(_playing?Icons.pause:Icons.play_arrow,size:20))]),
+    Row(children:[const Text('TIMELINE',style:TextStyle(fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1)),const Spacer(),Text('${(_time/1000).toStringAsFixed(2)}s',style:const TextStyle(color:Colors.white60,fontSize:11)),IconButton(onPressed:_addKey,icon:const Icon(Icons.add_box_outlined,size:19),tooltip:'Add keyframe'),IconButton(onPressed:_togglePlayback,icon:Icon(_playing?Icons.pause:Icons.play_arrow,size:20))]),
     Expanded(child:LayoutBuilder(builder:(context,c)=>GestureDetector(onTapDown:(d)=>_timelineTap(d.localPosition,c.maxWidth),onHorizontalDragUpdate:(d)=>_timelineTap(d.localPosition,c.maxWidth),child:CustomPaint(size:Size.infinite,painter:_StudioTimelinePainter(_bones,_effects,_time,_duration))))),
   ]));
   Widget _inspector()=>Container(color:_panel,padding:const EdgeInsets.all(12),child:SingleChildScrollView(child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
@@ -194,7 +200,7 @@ class _StudioTimelinePainter extends CustomPainter{
   @override void paint(Canvas c,Size s){
     final row=math.max(22.0,s.height/(bones.length+effects.length+1)).toDouble();final line=Paint()..color=Colors.white12;
     for(int i=0;i<bones.length+effects.length+1;i++)c.drawLine(Offset(0,row*i),Offset(s.width,row*i),line);
-    var r=0;for(final b in bones){final y=row*(r+.5);c.drawTextMarker(Offset(4,y-6),b.name,Colors.white70);for(final k in b.keys){final x=k/duration*s.width;c.drawCircle(Offset(x.toDouble(),y),4,Paint()..color=const Color(0xFFFFD76A));}r++;}
+    var r=0;for(final b in bones){final y=row*(r+.5);c.drawTextMarker(Offset(4,y-6),b.name,Colors.white70);for(final k in (b.rotationKeys.isEmpty?b.keys:b.rotationKeys.keys.toList())){final x=k/duration*s.width;c.drawCircle(Offset(x.toDouble(),y),4,Paint()..color=const Color(0xFFFFD76A));}r++;}
     for(final e in effects){final y=row*(r+.5),x=e.start*s.width,w=(e.end-e.start)*s.width;c.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x.toDouble(),y-8,w.clamp(0.0,s.width).toDouble(),16),const Radius.circular(3)),Paint()..color=const Color(0xFF7655E8));for(final k in e.keys)c.drawCircle(Offset(k/duration*s.width,y),3,Paint()..color=Colors.white);r++;}
     final x=time/duration*s.width;c.drawLine(Offset(x.toDouble(),0),Offset(x.toDouble(),s.height),Paint()..color=Colors.white..strokeWidth=2);
   }
