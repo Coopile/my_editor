@@ -215,6 +215,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     _bones.add(_RigBone('bone_${DateTime.now().microsecondsSinceEpoch}','Bone $n',Offset(x,y),Offset(x+.12,y+.14),parent:_selectedBone>=0?_bones[_selectedBone].id:''));
     _selectedBone=_bones.length-1;_changed();
   }
+  bool _wouldCreateBoneCycle(String childId,String parentId){var current=parentId;final visited=<String>{};while(current.isNotEmpty){if(current==childId)return true;if(!visited.add(current))return true;final index=_bones.indexWhere((bone)=>bone.id==current);if(index<0)return false;current=_bones[index].parent;}return false;}
   void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
   void _addEffect(String name){final e=MangaCutEffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
   void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;b.aKeys[_time]=b.a;b.bKeys[_time]=b.b;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();e.strengthKeys[_time/_duration]=e.strength;}_changed();}
@@ -335,6 +336,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       if(_timelineDragKind=='boneKey'&&_timelineDragIndex>=0&&_timelineDragIndex<_bones.length){
         final bone=_bones[_timelineDragIndex];final old=_timelineDragKey;
         if(bone.rotationKeys.containsKey(old)){final value=bone.rotationKeys.remove(old)!;bone.rotationKeys[t]=value;}
+        if(bone.aKeys.containsKey(old)){final value=bone.aKeys.remove(old)!;bone.aKeys[t]=value;}
+        if(bone.bKeys.containsKey(old)){final value=bone.bKeys.remove(old)!;bone.bKeys[t]=value;}
         final at=bone.keys.indexOf(old);if(at>=0)bone.keys[at]=t;
         bone.keys.sort();_timelineDragKey=t;
       }else if(_timelineDragIndex>=0&&_timelineDragIndex<_effects.length){
@@ -411,7 +414,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     if(_tab==0)...[
       Row(children:[const Text('SKELETON',style:TextStyle(color:Colors.white60,fontSize:10)),const Spacer(),IconButton(onPressed:_addBone,icon:const Icon(Icons.add_circle,color:_accent)),IconButton(onPressed:_deleteBone,icon:const Icon(Icons.delete_outline,color:Colors.redAccent))]),
       for(int i=0;i<_bones.length;i++)ListTile(dense:true,selected:_selectedBone==i,leading:const Icon(Icons.account_tree,size:17),title:TextField(controller:TextEditingController(text:_bones[i].name),style:const TextStyle(fontSize:12),decoration:const InputDecoration(border:InputBorder.none,isDense:true),onSubmitted:(v){_bones[i].name=v;_changed();}),subtitle:Text(_bones[i].parent.isEmpty?'Root bone':'Child bone',style:const TextStyle(fontSize:9,color:Colors.white38)),onTap:()=>setState(()=>_selectedBone=i),trailing:IconButton(icon:const Icon(Icons.close,size:16),onPressed:()=>setState((){_selectedBone=i;_deleteBone();}))),
-      if(_selectedBone>=0&&_selectedBone<_bones.length)DropdownButtonFormField<String>(value:_bones[_selectedBone].parent.isEmpty?null:_bones[_selectedBone].parent,decoration:const InputDecoration(labelText:'Parent bone'),items:[const DropdownMenuItem(value:'',child:Text('No parent')),for(final b in _bones.where((b)=>b.id!=_bones[_selectedBone].id))DropdownMenuItem(value:b.id,child:Text(b.name))],onChanged:(v){_bones[_selectedBone].parent=v??'';_changed();}),
+      if(_selectedBone>=0&&_selectedBone<_bones.length)DropdownButtonFormField<String>(value:_bones[_selectedBone].parent.isEmpty?null:_bones[_selectedBone].parent,decoration:const InputDecoration(labelText:'Parent bone'),items:[const DropdownMenuItem(value:'',child:Text('No parent')),for(final b in _bones.where((b)=>b.id!=_bones[_selectedBone].id))DropdownMenuItem(value:b.id,child:Text(b.name))],onChanged:(v){final parent=v??'';if(parent.isNotEmpty&&_wouldCreateBoneCycle(_bones[_selectedBone].id,parent)){ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('That parent would create a bone cycle.')));return;}_bones[_selectedBone].parent=parent;_changed();}),
     ] else if(_tab==1)...[
       const Text('Paint a mask directly on the canvas. Mask strokes are stored per workspace.',style:TextStyle(fontSize:11,color:Colors.white60)),SwitchListTile(value:_maskErase,onChanged:(v)=>setState(()=>_maskErase=v),title:const Text('Erase mask',style:TextStyle(fontSize:12))),_slider('Brush size',_brush,4,100,(v)=>setState(()=>_brush=v)),FilledButton.icon(onPressed:_sourceImage==null?null:_inpaintMaskedArea,icon:const Icon(Icons.auto_fix_high),label:const Text('Inpaint masked area')),TextButton.icon(onPressed:()=>setState(()=>_maskStrokes.clear()),icon:const Icon(Icons.delete_outline),label:const Text('Clear mask')),
     ] else if(_tab==2)...[
