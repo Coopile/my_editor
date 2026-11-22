@@ -154,8 +154,13 @@ class _RigPainter extends CustomPainter {
     c.drawCircle(center.translate(0,-s.height*.31),s.width*.065,Paint()..color=const Color(0xFF52647B)); }
     for(final stroke in masks){final p=Paint()..color=Colors.white.withOpacity(.8)..strokeWidth=brush..strokeCap=StrokeCap.round..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
     for(final stroke in liquify){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.8)..strokeWidth=2..style=PaintingStyle.stroke;for(int i=1;i<stroke.length;i++)c.drawLine(Offset(stroke[i-1].dx*s.width,stroke[i-1].dy*s.height),Offset(stroke[i].dx*s.width,stroke[i].dy*s.height),p);}
-    for(int i=0;i<bones.length;i++){final b=bones[i],a=Offset(b.a.dx*s.width,b.a.dy*s.height),z=Offset(b.b.dx*s.width,b.b.dy*s.height);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
+    for(int i=0;i<bones.length;i++){final b=bones[i];final localA=Offset(b.a.dx*s.width,b.a.dy*s.height),localB=Offset(b.b.dx*s.width,b.b.dy*s.height);final rotatedB=localA+Offset((localB-localA).dx*math.cos(b.rotation)-(localB-localA).dy*math.sin(b.rotation),(localB-localA).dx*math.sin(b.rotation)+(localB-localA).dy*math.cos(b.rotation));final a=_applyParentTransforms(i,localA),z=_applyParentTransforms(i,rotatedB);final p=Paint()..color=(i==selected?const Color(0xFFFFD76A):const Color(0xFF71D8FF))..strokeWidth=(i==selected?5.0:3.0)..strokeCap=StrokeCap.round;c.drawLine(a,z,p);c.drawCircle(a,6,Paint()..color=Colors.white);c.drawCircle(z,7,Paint()..color=p.color);}
     if(tab==2){final p=Paint()..color=const Color(0xFFB78BFF).withOpacity(.12)..style=PaintingStyle.stroke..strokeWidth=1;for(int x=0;x<8;x++)for(int y=0;y<6;y++){final dx=s.width*x/7,dy=s.height*y/5;c.drawCircle(Offset(dx,dy),2,p);}}
+  }
+  Offset _applyParentTransforms(int index,Offset point){
+    final visited=<int>{};var parentId=bones[index].parent;
+    while(parentId.isNotEmpty){final parentIndex=bones.indexWhere((bone)=>bone.id==parentId);if(parentIndex<0||!visited.add(parentIndex))break;final parent=bones[parentIndex];final pivot=Offset(parent.a.dx*size.width,parent.a.dy*size.height);final dx=point.dx-pivot.dx,dy=point.dy-pivot.dy;point=pivot+Offset(dx*math.cos(parent.rotation)-dy*math.sin(parent.rotation),dx*math.sin(parent.rotation)+dy*math.cos(parent.rotation));parentId=parent.parent;}
+    return point;
   }
   void _drawImageMesh(Canvas canvas,Size size,ui.Image image){
     const cols=24, rows=24;
