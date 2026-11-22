@@ -18,6 +18,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'home_screen.dart';
+import 'mangacut_editor.dart';
 
 final ValueNotifier<Color> editShiftAccent =
     ValueNotifier<Color>(const Color(0xFF79C8FF));
@@ -3667,6 +3668,17 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, letterSpacing: .1),
         ),
         actions: [
+          IconButton(
+            tooltip: 'MangaCut Animation Studio',
+            onPressed: () => Navigator.of(context).push(MaterialPageRoute(
+              builder: (_) => MangaCutEditor(
+                projectId: widget.projectId,
+                projectName: widget.projectName,
+                layerNames: _layers.map((layer) => layer.text).toList(),
+              ),
+            )),
+            icon: const Icon(Icons.animation_rounded, size: 20),
+          ),
           IconButton(tooltip: 'Project settings', onPressed: _openProjectSettings, icon: const Icon(Icons.settings_rounded, size: 20)),
           if (_pivotMode)
             const Center(child: Padding(
