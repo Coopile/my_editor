@@ -1568,6 +1568,53 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     _openInspectorSheet();
   }
 
+  void _togglePivotMode() {
+    if (_sel == null || _sel! < 0 || _sel! >= _layers.length) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a layer before editing its pivot.'))); return; }
+    setState(() => _pivotMode = !_pivotMode);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(_pivotMode ? 'Pivot edit enabled · drag the pivot handle' : 'Pivot edit disabled'), duration: const Duration(milliseconds: 1100)));
+  }
+
+  Future<void> _openKeyframeEditor() async {
+    final index = _sel;
+    if (index == null || index < 0 || index >= _layers.length) { ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a layer to edit its keyframe curve.'))); return; }
+    final layer = _layers[index];
+    await showDialog<void>(context: context, barrierColor: Colors.black87, builder: (dialogContext) => Dialog(
+      backgroundColor: const Color(0xFF343957), insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 28),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+      child: StatefulBuilder(builder: (context, refresh) => ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 820, maxHeight: 650),
+        child: Padding(padding: const EdgeInsets.all(18), child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [const Icon(Icons.show_chart_rounded, color: Color(0xFF20E3A0)), const SizedBox(width: 9), const Expanded(child: Text('KEYFRAME CURVE EDITOR', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, letterSpacing: 1.1))), IconButton(onPressed: () => Navigator.pop(dialogContext), icon: const Icon(Icons.close))]),
+          const SizedBox(height: 12),
+          Expanded(child: Row(children: [
+            Expanded(flex: 5, child: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFF414968), borderRadius: BorderRadius.circular(16)), child: Column(children: [
+              Expanded(child: _BezierCurveEditor(first: layer.curveHandle1, second: layer.curveHandle2, cyclic: layer.curveCyclic || layer.curvePreset == 'Cyclic', onChanged: (a,b) { _ed(layer, () { layer.curveHandle1=a; layer.curveHandle2=b; layer.curvePreset='Custom'; layer.curveCyclic=false; }); refresh(() {}); })),
+              const SizedBox(height: 8), Text(layer.curvePreset, style: const TextStyle(color: Colors.white70, fontSize: 13)),
+            ]))),
+            const SizedBox(width: 12),
+            Expanded(flex: 2, child: GridView.count(crossAxisCount: 2, mainAxisSpacing: 9, crossAxisSpacing: 9, childAspectRatio: 1.05, children: [
+              for (final preset in ['Linear','Ease In','Ease Out','Ease In Out','Elastic','Bounce','Back','Cyclic'])
+                InkWell(borderRadius: BorderRadius.circular(12), onTap: () {
+                  _ed(layer, () { layer.curvePreset=preset; layer.curveCyclic=preset=='Cyclic';
+                    switch(preset){
+                      case 'Linear': layer.curveHandle1=const Offset(0,0); layer.curveHandle2=const Offset(1,1); break;
+                      case 'Ease In': layer.curveHandle1=const Offset(.42,0); layer.curveHandle2=const Offset(1,1); break;
+                      case 'Ease Out': layer.curveHandle1=const Offset(0,0); layer.curveHandle2=const Offset(.58,1); break;
+                      case 'Ease In Out': layer.curveHandle1=const Offset(.42,0); layer.curveHandle2=const Offset(.58,1); break;
+                      case 'Elastic': layer.curveHandle1=const Offset(.2,-.18); layer.curveHandle2=const Offset(.8,1.18); break;
+                      case 'Bounce': layer.curveHandle1=const Offset(.2,1.2); layer.curveHandle2=const Offset(.8,.8); break;
+                      case 'Back': layer.curveHandle1=const Offset(.34,-.18); layer.curveHandle2=const Offset(.72,1.18); break;
+                    }
+                  }); refresh(() {});
+                }, child: Container(decoration: BoxDecoration(color: layer.curvePreset==preset ? const Color(0xFF172A35) : const Color(0xFF20263A), borderRadius: BorderRadius.circular(12), border: Border.all(color: layer.curvePreset==preset ? const Color(0xFF20E3A0) : Colors.white12, width: layer.curvePreset==preset ? 2 : 1)), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(preset=='Cyclic'?Icons.waves_rounded:preset=='Elastic'?Icons.multiline_chart_rounded:preset=='Bounce'?Icons.show_chart_rounded:Icons.insights_rounded, color: const Color(0xFF42E9AE), size: 24), const SizedBox(height: 6), Text(preset, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700))]))),
+            ])),
+          ])),
+          const SizedBox(height: 10),
+          Row(children: [Text(layer.kfs.length.toString() + ' keyframes', style: const TextStyle(color: Colors.white60, fontSize: 11)), const Spacer(), TextButton(onPressed: () { _ed(layer, () { layer.curvePreset='Linear'; layer.curveCyclic=false; layer.curveHandle1=const Offset(0,0); layer.curveHandle2=const Offset(1,1); }); refresh(() {}); }, child: const Text('Reset')), FilledButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('Done'))]),
+        ])),
+      )),
+    ));
+  }
   void _addCamera() => _add(Layer.camera(const Offset(120, 85)));
   void _addNull() => _add(Layer.nullObject(const Offset(90, 90)));
 
@@ -2341,27 +2388,24 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         );
       }
     }
-    if (sel && _pivotMode) {
+    if (sel) {
       child = Stack(children: [
         child,
         Positioned.fill(
-          child: LayoutBuilder(builder: (pivotContext, constraints) => GestureDetector(
+          child: IgnorePointer(ignoring: !_pivotMode, child: LayoutBuilder(builder: (pivotContext, constraints) => GestureDetector(
             behavior: HitTestBehavior.translucent,
+            onPanStart: (_) => _beginGestureUndo(),
             onPanUpdate: (d) => setState(() {
-              l.pivot = Offset(
-                (d.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0).toDouble(),
-                (d.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0).toDouble(),
-              );
+              l.pivot = Offset((d.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0).toDouble(), (d.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0).toDouble());
             }),
-            child: Align(
-              alignment: Alignment(l.pivot.dx * 2 - 1, l.pivot.dy * 2 - 1),
-              child: Container(
-                width: 22, height: 22,
-                decoration: BoxDecoration(color: const Color(0xFF20E36F), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                child: const Icon(Icons.open_with, size: 13, color: Colors.white),
-              ),
-            ),
-          )),
+            onPanEnd: (_) => _endGestureUndo(),
+            onPanCancel: _endGestureUndo,
+            child: Align(alignment: Alignment(l.pivot.dx * 2 - 1, l.pivot.dy * 2 - 1), child: Container(
+              width: _pivotMode ? 26 : 14, height: _pivotMode ? 26 : 14,
+              decoration: BoxDecoration(color: _pivotMode ? const Color(0xFF20E36F) : const Color(0xFFFFD66B), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2), boxShadow: [BoxShadow(color: Colors.black.withOpacity(.35), blurRadius: 5)]),
+              child: _pivotMode ? const Icon(Icons.open_with, size: 15, color: Colors.white) : null,
+            )),
+          ))),
         ),
       ]);
     }
@@ -3769,10 +3813,11 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
   }
 
 
-  Widget _tool(IconData icon, String label, VoidCallback onTap) => SizedBox(
+  Widget _tool(IconData icon, String label, VoidCallback onTap, {VoidCallback? onDoubleTap}) => SizedBox(
     width: 70,
     child: InkWell(
       onTap: onTap,
+      onDoubleTap: onDoubleTap,
       child: SizedBox(
         height: 76,
         child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
