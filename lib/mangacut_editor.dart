@@ -8,6 +8,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:ffmpeg_kit_flutter_new_full/ffmpeg_kit.dart';
+import 'package:ffmpeg_kit_flutter_new_full/return_code.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:cross_file/cross_file.dart';
 
 class MangaCutEditor extends StatefulWidget {
   final String projectId;
@@ -71,7 +75,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   int _duration=6000;
   double _brush=28, _strength=.55;
   String _target='';
-  bool _playing=false, _maskErase=false;
+  bool _playing=false, _maskErase=false, _exportingAnimation=false;
   Timer? _playTimer;
   int _dragBoneEnd=0;
   String _timelineDragKind='';
@@ -179,6 +183,64 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
     });
     await _save();
     if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Quick inpaint completed. This uses edge-colour propagation, so complex backgrounds may need manual cleanup.')));
+  }
+
+  Future<void> _exportRigAnimation() async {
+    final image=_sourceImage;
+    if(image==null){
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Import an image before exporting a rig animation.')));
+      return;
+    }
+    if(_exportingAnimation)return;
+    if(_playing){_playTimer?.cancel();_playTimer=null;_playing=false;}
+    setState(()=>_exportingAnimation=true);
+    final originalTime=_time;
+    final docs=await getApplicationDocumentsDirectory();
+    final work=Directory('${docs.path}/mangacut_frames_${DateTime.now().microsecondsSinceEpoch}');
+    try{
+      await work.create(recursive:true);
+      const fps=30;
+      final frameCount=math.max(2,(_duration/1000*fps).ceil()+1);
+      final scale=math.min(1.0,1280/math.max(image.width,image.height));
+      final width=math.max(2,((image.width*scale).round()~/2)*2);
+      final height=math.max(2,((image.height*scale).round()~/2)*2);
+      final outputSize=Size(width.toDouble(),height.toDouble());
+      for(var frame=0;frame<frameCount;frame++){
+        if(!mounted)throw StateError('Editor closed during export.');
+        final frameTime=math.min(_duration,(frame*1000/fps).round());
+        _applyPoseAt(frameTime);
+        final recorder=ui.PictureRecorder();
+        final canvas=Canvas(recorder);
+        final painter=_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_tab,_brush*width/500.0,_strength,image,frameTime,_duration,_effects);
+        painter.paintComposite(canvas,outputSize);
+        final picture=recorder.endRecording();
+        final rendered=await picture.toImage(width,height);
+        picture.dispose();
+        final png=await rendered.toByteData(format:ui.ImageByteFormat.png);
+        rendered.dispose();
+        if(png==null)throw StateError('Could not render animation frame $frame.');
+        final name='frame_${frame.toString().padLeft(5,'0')}.png';
+        await File('${work.path}/$name').writeAsBytes(png.buffer.asUint8List(),flush:false);
+      }
+      final outputPath='${docs.path}/mangacut_animation_${DateTime.now().microsecondsSinceEpoch}.mp4';
+      final inputPattern='${work.path}/frame_%05d.png';
+      final command='-y -framerate $fps -i "$inputPattern" -c:v libx264 -pix_fmt yuv420p -movflags +faststart "$outputPath"';
+      final session=await FFmpegKit.execute(command);
+      final code=await session.getReturnCode();
+      if(!ReturnCode.isSuccess(code)||!await File(outputPath).exists()){
+        final logs=await session.getAllLogsAsString();
+        throw StateError('FFmpeg could not encode the rig animation. ${logs.length>500?logs.substring(logs.length-500):logs}');
+      }
+      if(!mounted)return;
+      await SharePlus.instance.share(ShareParams(title:'MangaCut rig animation',text:'Exported with EditShift',files:[XFile(outputPath)]));
+      if(mounted)ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content:Text('Rig animation exported as MP4.')));
+    }catch(error){
+      if(mounted){final message=error.toString();ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Animation export failed: ${message.length>220?message.substring(0,220):message}'),duration:const Duration(seconds:7)));}
+    }finally{
+      _applyPoseAt(originalTime);
+      if(await work.exists())await work.delete(recursive:true);
+      if(mounted)setState(()=>_exportingAnimation=false);
+    }
   }
 
   Future<void> _applyCompositeToMainLayer() async {
@@ -355,7 +417,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   void _timelinePanEnd(){_timelineDragKind='';_timelineDragIndex=-1;_timelineDragKey=-1;_save();}
   @override
   Widget build(BuildContext context){
-    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace'),IconButton(onPressed:(){widget.onApplyEffects?.call(List.unmodifiable(_effects));},icon:const Icon(Icons.auto_awesome),tooltip:'Apply effects to main editor'),IconButton(onPressed:_applyCompositeToMainLayer,icon:const Icon(Icons.layers_outlined),tooltip:'Apply current image composite')]),
+    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace'),IconButton(onPressed:(){widget.onApplyEffects?.call(List.unmodifiable(_effects));},icon:const Icon(Icons.auto_awesome),tooltip:'Apply effects to main editor'),IconButton(onPressed:_applyCompositeToMainLayer,icon:const Icon(Icons.layers_outlined),tooltip:'Apply current image composite'),IconButton(onPressed:_exportingAnimation?null:_exportRigAnimation,icon:_exportingAnimation?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.movie_creation_outlined),tooltip:'Export rig animation as MP4')]),
       body:SafeArea(child:Column(children:[
         _topTabs(),
         Expanded(child:Row(children:[
