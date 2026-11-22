@@ -500,6 +500,7 @@ class Layer {
   Offset curveHandle1 = const Offset(.42, 0);
   Offset curveHandle2 = const Offset(.58, 1);
   bool curveCyclic = false;
+  String curvePreset = 'Ease';
 
   Layer.text(this.text, this.pos) : isMesh = false, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false;
   Layer.mesh(this.pos) : isMesh = true, isImage = false, isNull = false, isSolid = false, isShape = false, isAdjustment = false, isCamera = false, text = 'Mesh';
@@ -536,6 +537,7 @@ class Layer {
       ..curveHandle1 = curveHandle1
       ..curveHandle2 = curveHandle2
       ..curveCyclic = curveCyclic
+      ..curvePreset = curvePreset
       ..parentIndex = parentIndex
       ..groupId = groupId
       ..mesh = List.of(mesh)
@@ -592,13 +594,33 @@ class Layer {
       }
     }
     var f = a.t == b.t ? 0.0 : (ms - a.t) / (b.t - a.t);
-    f = curveCyclic
-        ? (f + .18 * math.sin(f * math.pi * 6)).clamp(0.0, 1.0).toDouble()
-        : _bezierProgress(f, curveHandle1, curveHandle2);
+    f = _curveProgress(f, curvePreset, curveHandle1, curveHandle2, curveCyclic);
     pos = Offset.lerp(a.pos, b.pos, f)!;
     scale = ui.lerpDouble(a.scale, b.scale, f)!;
     rot = ui.lerpDouble(a.rot, b.rot, f)!;
     opacity = ui.lerpDouble(a.opacity, b.opacity, f)!;
+  }
+}
+
+
+double _curveProgress(double value, String preset, Offset first, Offset second, bool cyclic) {
+  final t=value.clamp(0.0,1.0).toDouble();
+  if(cyclic || preset=='Cyclic') return (t + .18*math.sin(t*math.pi*6)).clamp(0.0,1.0).toDouble();
+  switch(preset){
+    case 'Linear': return t;
+    case 'Ease In': return t*t;
+    case 'Ease Out': return 1-math.pow(1-t,2).toDouble();
+    case 'Ease In Out': return t<.5?2*t*t:1-math.pow(-2*t+2,2).toDouble()/2;
+    case 'Elastic':
+      if(t==0||t==1)return t;
+      return (math.pow(2,-10*t)*math.sin((t*10-.75)*(2*math.pi/3))+1).clamp(0.0,1.0).toDouble();
+    case 'Bounce':
+      if(t<1/2.75)return 7.5625*t*t;
+      if(t<2/2.75){final x=t-1.5/2.75;return 7.5625*x*x+.75;}
+      if(t<2.5/2.75){final x=t-2.25/2.75;return 7.5625*x*x+.9375;}
+      final x=t-2.625/2.75;return (7.5625*x*x+.984375).clamp(0.0,1.0).toDouble();
+    case 'Back': return (t*t*((1.70158+1)*t-1.70158)).clamp(0.0,1.0).toDouble();
+    default: return _bezierProgress(t,first,second);
   }
 }
 
@@ -919,6 +941,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     'curveHandle1': [layer.curveHandle1.dx, layer.curveHandle1.dy],
     'curveHandle2': [layer.curveHandle2.dx, layer.curveHandle2.dy],
     'curveCyclic': layer.curveCyclic,
+    'curvePreset': layer.curvePreset,
   };
 
   Layer _decodeLayer(Map<String, dynamic> data) {
@@ -963,7 +986,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
       ..groupId = (data['groupId'] as num?)?.toInt()
       ..curveHandle1 = Offset((h1[0] as num).toDouble(), (h1[1] as num).toDouble())
       ..curveHandle2 = Offset((h2[0] as num).toDouble(), (h2[1] as num).toDouble())
-      ..curveCyclic = data['curveCyclic'] as bool? ?? false;
+      ..curveCyclic = data['curveCyclic'] as bool? ?? false
+      ..curvePreset = data['curvePreset'] as String? ?? 'Ease';
     final mesh = data['mesh'] as List?;
     if (mesh != null) {
       layer.mesh = mesh.map((point) => Offset(
@@ -2896,8 +2920,8 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
                     selected: selected == i,
                     visible: !_layers[i].hidden,
                     keyframeTimes: _layers[i].effectKfs.map((key) => key.t).toList(),
-                    onTap: () { setState(() => _sel = i); _tab = tabs.indexWhere((tab) => tab.$1 == 'Effects'); _openInspectorSheet(); },
-                    onKeyframeTap: (time) { _vc?.seekTo(Duration(milliseconds: time)); setState(() => _sel = i); _tab = tabs.indexWhere((tab) => tab.$1 == 'Effects'); _openInspectorSheet(); },
+                    onTap: () => setState(() => _sel = i),
+                    onKeyframeTap: (time) { _vc?.seekTo(Duration(milliseconds: time)); setState(() => _sel = i); },
                     onKeyframeMove: (oldTime, newTime) => _moveEffectKeyframe(i, oldTime, newTime),
                     onChanged: (_) {},
                   ),
@@ -2982,6 +3006,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           layer.curveHandle1 = first;
           layer.curveHandle2 = second;
           layer.curveCyclic = false;
+          layer.curvePreset = label;
         }),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
@@ -3776,7 +3801,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         _tool(Icons.layers_rounded, 'Adjustment', _addAdjustmentLayer),
         _tool(Icons.control_camera_rounded, 'Null', () => _add(Layer.nullObject(const Offset(100, 70)))),
         _tool(Icons.category_rounded, 'Shape', _addShapeLayer),
-        _tool(Icons.open_with_rounded, 'Transform', () => _openEditorTab('Transform')),
+        _tool(Icons.open_with_rounded, 'Transform', () => _openEditorTab('Transform'), onDoubleTap: _togglePivotMode),
+        _tool(Icons.show_chart_rounded, 'Keyframes', _openKeyframeEditor),
+        _tool(Icons.videocam_rounded, 'Camera', _addCamera),
         _tool(Icons.auto_awesome_rounded, 'Effects', () => _openEditorTab('Effects')),
         _tool(Icons.account_tree_rounded, 'Parent', _parentSelectedLayer),
         _tool(Icons.add_link_rounded, 'Create Parent', _createParentForSelectedLayers),
