@@ -272,7 +272,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       final session=await FFmpegKit.execute(command);
       final code=await session.getReturnCode();
       if(!ReturnCode.isSuccess(code)||!await File(outputPath).exists()){
-        final logs=await session.getAllLogsAsString();
+        final logs=(await session.getAllLogsAsString())??'';
         throw StateError('FFmpeg could not encode the rig animation. ${logs.length>500?logs.substring(logs.length-500):logs}');
       }
       if(!mounted)return;
