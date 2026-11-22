@@ -592,7 +592,7 @@ class _RigPainter extends CustomPainter {
     var total=0.0;
     for(final effect in effects){
       if(effect.name.toLowerCase()!=name.toLowerCase())continue;
-      if(normalized>=effect.start&&normalized<=effect.end)total+=effect.strengthAt(normalized);
+      if(normalized>=effect.start&&normalized<=effect.end)total+=effect.strengthAt(normalized)*effect.parameterAt('amplitude',normalized);
     }
     return total;
   }
@@ -603,19 +603,19 @@ class _RigPainter extends CustomPainter {
   }
   void _applyMotionEffects(Canvas canvas,Size size){
     final seconds=time/1000.0;
-    final shake=(_effectStrength('Shake')*_effectParameter('Shake','amplitude',1))+(_effectStrength('Twitch')*_effectParameter('Twitch','amplitude',1)*.45);
-    final pulse=(_effectStrength('Pulse')*_effectParameter('Pulse','amplitude',1))+(_effectStrength('Bounce')*_effectParameter('Bounce','amplitude',1)*.35);
-    final spin=_effectStrength('Spin')*_effectParameter('Spin','amplitude',1);
-    final swing=(_effectStrength('Swing')*_effectParameter('Swing','amplitude',1))+(_effectStrength('Wobble')*_effectParameter('Wobble','amplitude',1)*.35);
-    final drift=_effectStrength('Drift')*_effectParameter('Drift','amplitude',1);
-    final impact=_effectStrength('Impact')*_effectParameter('Impact','amplitude',1);
-    final shakeFrequency=_effectParameter('Shake','frequency',1),pulseFrequency=_effectParameter('Pulse','frequency',1);
+    final shake=_effectStrength('Shake')+_effectStrength('Twitch')*.45;
+    final pulse=_effectStrength('Pulse')+_effectStrength('Bounce')*.35;
+    final spin=_effectStrength('Spin');
+    final swing=_effectStrength('Swing')+_effectStrength('Wobble')*.35+_effectStrength('Oscillate')*.25;
+    final drift=_effectStrength('Drift');
+    final impact=_effectStrength('Impact');
+    final shakeFrequency=_effectParameter('Shake','frequency',1),pulseFrequency=math.max(_effectParameter('Pulse','frequency',1),_effectParameter('Bounce','frequency',1));
     final phase=_effectParameter('Shake','phase',0);
     final center=Offset(size.width/2,size.height/2);
     final dx=math.sin(seconds*31*shakeFrequency+phase)*shake*5+math.sin(seconds*2.2)*drift*size.width*.025;
     final dy=math.cos(seconds*27*shakeFrequency+phase)*shake*3-math.sin(seconds*5*pulseFrequency).abs()*impact*size.height*.025;
     final scale=1+math.sin(seconds*5*pulseFrequency)*pulse*.035*_effectParameter('Pulse','scale',1);
-    final angle=math.sin(seconds*4*_effectParameter('Swing','frequency',1))*swing*.08+seconds*spin*.35+_effectParameter('Spin','angle',0);
+    final angle=math.sin(seconds*4*math.max(_effectParameter('Swing','frequency',1),_effectParameter('Wobble','frequency',1),_effectParameter('Oscillate','frequency',1)))*swing*.08+seconds*spin*.35+_effectParameter('Spin','angle',0);
     canvas.translate(center.dx+dx,center.dy+dy);
     canvas.rotate(angle);
     canvas.scale(scale,scale);
@@ -665,11 +665,13 @@ class _RigPainter extends CustomPainter {
       for(var x=0;x<=cols;x++){
         final u=x/cols,v=y/rows;
         var px=u*size.width,py=v*size.height;
-        final bend=_effectStrength('Bend')*_effectParameter('Bend','amplitude',1);
-        final wind=_effectStrength('Wind')*_effectParameter('Wind','amplitude',1);
+        final bend=_effectStrength('Bend');
+        final wind=_effectStrength('Wind');
         final windFrequency=_effectParameter('Wind','frequency',1);
         if(bend>0){py+=math.sin(u*math.pi)*bend*size.height*.12;}
         if(wind>0){px+=math.sin(v*9*windFrequency+time*.006)*wind*size.width*.025*(1-v*.35);py+=math.cos(u*7*windFrequency+time*.004)*wind*size.height*.008;}
+        final liquifyEffect=_effectStrength('Liquify');
+        if(liquifyEffect>0){final cx=size.width*.5,cy=size.height*.5,dx=px-cx,dy=py-cy,dist=math.sqrt(dx*dx+dy*dy),reach=math.min(size.width,size.height)*.48;if(dist<reach){final falloff=1-dist/reach;final angle=liquifyEffect*.35*falloff;px=cx+dx*math.cos(angle)-dy*math.sin(angle);py=cy+dx*math.sin(angle)+dy*math.cos(angle);}}
         {
           for(final stroke in liquify){
             for(var k=1;k<stroke.length;k++){
