@@ -1797,9 +1797,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
     }
   }
 
-  String? _exportMangaClipFilter(MangaCutEffectClip clip,double totalDuration){
-    final start=(clip.start*totalDuration).clamp(0.0,totalDuration).toStringAsFixed(3);
-    final end=(clip.end*totalDuration).clamp(0.0,totalDuration).toStringAsFixed(3);
+  String? _exportMangaClipFilter(MangaCutEffectClip clip,double totalDuration,double trimStart,double clipDuration){
+    final start=(clip.start*totalDuration-trimStart).clamp(0.0,clipDuration).toStringAsFixed(3);
+    final end=(clip.end*totalDuration-trimStart).clamp(0.0,clipDuration).toStringAsFixed(3);
     if(double.parse(end)<=double.parse(start))return null;
     final strength=clip.strength.clamp(0.0,2.0).toDouble();
     final enable=":enable='between(t,$start,$end)'";
@@ -1984,7 +1984,7 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
           photoFilters.add(layerEffect);
         }
         for(final clip in layer.mangaEffects){
-          final clipFilter=_exportMangaClipFilter(clip,totalDuration);
+          final clipFilter=_exportMangaClipFilter(clip,totalDuration,trimStart,clipDuration);
           if(clipFilter!=null&&clipFilter.isNotEmpty)photoFilters.add(clipFilter);
         }
         if (layer.rot.abs() > .001) {
