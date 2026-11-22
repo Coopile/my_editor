@@ -349,7 +349,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
           if(MediaQuery.of(context).size.width>700) SizedBox(width:280,child:_inspector()),
         ])),
         if(MediaQuery.of(context).size.width<=700) SizedBox(height:245,child:_inspector()),
-      ]))));
+      ])));
   }
   Widget _topTabs()=>Container(color:_panel,height:52,child:ListView(scrollDirection:Axis.horizontal,children:[
     _tabButton('Rigging',Icons.account_tree,0),_tabButton('Mask',Icons.gesture,1),_tabButton('Liquify',Icons.blur_on,2),_tabButton('Animation',Icons.timeline,3),_tabButton('Effects',Icons.auto_awesome,4),
@@ -476,7 +476,7 @@ class _RigPainter extends CustomPainter {
     final impact=_effectStrength('Impact');
     final center=Offset(size.width/2,size.height/2);
     final dx=math.sin(seconds*31)*shake*5+math.sin(seconds*2.2)*drift*size.width*.025;
-    final dy=math.cos(seconds*27)*shake*3-math.abs(math.sin(seconds*5))*impact*size.height*.025;
+    final dy=math.cos(seconds*27)*shake*3-math.sin(seconds*5).abs()*impact*size.height*.025;
     final scale=1+math.sin(seconds*5)*pulse*.035;
     final angle=math.sin(seconds*4)*swing*.08+seconds*spin*.35;
     canvas.translate(center.dx+dx,center.dy+dy);
