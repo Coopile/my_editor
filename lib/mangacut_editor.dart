@@ -202,8 +202,8 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       const fps=30;
       final frameCount=math.max(2,(_duration/1000*fps).ceil()+1);
       final scale=math.min(1.0,1280/math.max(image.width,image.height));
-      final width=math.max(2,((image.width*scale).round()~/2)*2);
-      final height=math.max(2,((image.height*scale).round()~/2)*2);
+      final width=math.max(2,((image.width*scale).round()~/2)*2).toInt();
+      final height=math.max(2,((image.height*scale).round()~/2)*2).toInt();
       final outputSize=Size(width.toDouble(),height.toDouble());
       for(var frame=0;frame<frameCount;frame++){
         if(!mounted)throw StateError('Editor closed during export.');
