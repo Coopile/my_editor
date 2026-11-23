@@ -131,7 +131,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   String get _storageKey=>'mangacut.workspace.${widget.projectId}';
 
   @override
-  void initState(){super.initState();_target=widget.initialLayerName??(widget.layerNames.isEmpty?'Layer 1':widget.layerNames.first);_load();}
+  void initState(){super.initState();_target=widget.initialLayerName??(widget.layerImagePaths.isNotEmpty?widget.layerImagePaths.keys.first:(widget.layerNames.isEmpty?'Layer 1':widget.layerNames.first));_load();}
   Future<void> _load() async {
     final p=await SharedPreferences.getInstance(); final raw=p.getString(_storageKey); if(raw==null){await _loadProjectLayer(_target);return;}
     try { final j=jsonDecode(raw) as Map<String,dynamic>; if(!mounted)return; setState((){
