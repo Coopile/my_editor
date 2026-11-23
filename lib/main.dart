@@ -597,7 +597,10 @@ class Layer {
     f = _curveProgress(f, curvePreset, curveHandle1, curveHandle2, curveCyclic);
     pos = Offset.lerp(a.pos, b.pos, f)!;
     scale = ui.lerpDouble(a.scale, b.scale, f)!;
-    rot = ui.lerpDouble(a.rot, b.rot, f)!;
+    // Interpolate along the shortest angular path so a small turn across
+    // the -pi/pi boundary does not spin almost a full revolution.
+    final rotationDelta = ((b.rot - a.rot + math.pi) % (2 * math.pi)) - math.pi;
+    rot = a.rot + rotationDelta * f;
     opacity = ui.lerpDouble(a.opacity, b.opacity, f)!;
   }
 }
@@ -890,7 +893,9 @@ class _EditorState extends State<Editor> with SingleTickerProviderStateMixin {
         if (mounted) setState(() {});
         return;
       }
-      if (++_tickDivider % 2 != 0) return;
+      // Evaluate animated transforms on every display tick instead of
+      // skipping alternate frames. This keeps keyframed motion fluid at 60 Hz.
+      _tickDivider++;
       final frameMs = _ms;
       for (final layer in _layers) { layer.apply(frameMs); }
       if (mounted) setState(() {});
