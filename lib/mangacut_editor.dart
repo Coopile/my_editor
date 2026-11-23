@@ -116,6 +116,10 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   double _brush=28, _strength=.55;
   String _target='';
   bool _playing=false, _maskErase=false, _exportingAnimation=false;
+  double _canvasZoom=1.0;
+  final List<List<Map<String,dynamic>>> _rigUndo=[];
+  final List<List<Map<String,dynamic>>> _rigRedo=[];
+  List<Map<String,dynamic>>? _gestureRigBefore;
   Timer? _playTimer;
   int _dragBoneEnd=0;
   String _timelineDragKind='';
@@ -339,14 +343,48 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   }
 
   Future<void> _save() async { final p=await SharedPreferences.getInstance(); await p.setString(_storageKey,jsonEncode({'bones':_bones.map((b)=>b.toJson()).toList(),'effects':_effects.map((e)=>e.toJson()).toList(),'time':_time,'duration':_duration,'sourceImagePath':_sourceImagePath,'maskStrokes':_maskStrokes.map((stroke)=>stroke.map((p)=>[p.dx,p.dy]).toList()).toList(),'liquifyStrokes':_liquifyStrokes.map((stroke)=>stroke.toJson()).toList(),'weightStrokes':_weightStrokes.map((v)=>v.toJson()).toList()})); }
+  List<Map<String,dynamic>> _captureRig()=>_bones.map((bone)=>bone.toJson()).toList();
+  void _pushRigUndo(){
+    _rigUndo.add(_captureRig());
+    if(_rigUndo.length>80)_rigUndo.removeAt(0);
+    _rigRedo.clear();
+  }
+  void _beginRigGesture(){_gestureRigBefore=_captureRig();}
+  void _finishRigGesture(){
+    final before=_gestureRigBefore;_gestureRigBefore=null;
+    if(before==null)return;
+    final after=_captureRig();
+    if(jsonEncode(before)!=jsonEncode(after)){
+      _rigUndo.add(before);if(_rigUndo.length>80)_rigUndo.removeAt(0);_rigRedo.clear();
+    }
+    _save();
+  }
+  void _undoRig(){
+    if(_rigUndo.isEmpty)return;
+    _rigRedo.add(_captureRig());
+    final state=_rigUndo.removeLast();
+    setState((){_bones..clear()..addAll(state.map(_RigBone.fromJson));_selectedBone=-1;});_save();
+  }
+  void _redoRig(){
+    if(_rigRedo.isEmpty)return;
+    _rigUndo.add(_captureRig());
+    final state=_rigRedo.removeLast();
+    setState((){_bones..clear()..addAll(state.map(_RigBone.fromJson));_selectedBone=-1;});_save();
+  }
+  void _resetRigPose(){
+    if(_bones.isEmpty)return;
+    _pushRigUndo();
+    setState((){for(final bone in _bones){bone.a=bone.restA;bone.b=bone.restB;bone.rotation=0;}});_save();
+  }
   void _changed(){setState((){});_save();}
   void _addBone(){
+    _pushRigUndo();
     final n=_bones.length+1; final x=.28+(n%3)*.16, y=.28+(n%4)*.11;
     _bones.add(_RigBone('bone_${DateTime.now().microsecondsSinceEpoch}','Bone $n',Offset(x,y),Offset(x+.12,y+.14),parent:_selectedBone>=0?_bones[_selectedBone].id:''));
     _selectedBone=_bones.length-1;_changed();
   }
   bool _wouldCreateBoneCycle(String childId,String parentId){var current=parentId;final visited=<String>{};while(current.isNotEmpty){if(current==childId)return true;if(!visited.add(current))return true;final index=_bones.indexWhere((bone)=>bone.id==current);if(index<0)return false;current=_bones[index].parent;}return false;}
-  void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
+  void _deleteBone(){if(_selectedBone<0||_selectedBone>=_bones.length)return;_pushRigUndo();final id=_bones[_selectedBone].id;_bones.removeAt(_selectedBone);for(final b in _bones){if(b.parent==id)b.parent='';}_selectedBone=-1;_changed();}
   void _addEffect(String name){final e=MangaCutEffectClip('fx_${DateTime.now().microsecondsSinceEpoch}',name,_target,(_time/_duration).clamp(0.0,1.0),1);_effects.add(e);_selectedEffect=_effects.length-1;_changed();}
   void _addKey(){if(_selectedBone>=0){final b=_bones[_selectedBone];if(!b.keys.contains(_time))b.keys.add(_time);b.keys.sort();b.rotationKeys[_time]=b.rotation;b.aKeys[_time]=b.a;b.bKeys[_time]=b.b;}if(_selectedEffect>=0){final e=_effects[_selectedEffect];if(!e.keys.contains(_time))e.keys.add(_time);e.keys.sort();e.strengthKeys[_time/_duration]=e.strength;for(final entry in e.parameters.entries){e.parameterKeys.putIfAbsent(entry.key,()=>{})[_time/_duration]=entry.value;}}_changed();}
   double _easeProgress(_RigBone bone,int segmentStart,double t){
@@ -483,7 +521,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   void _timelinePanEnd(){_timelineDragKind='';_timelineDragIndex=-1;_timelineDragKey=-1;_save();}
   @override
   Widget build(BuildContext context){
-    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut Animation Studio',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace'),IconButton(onPressed:(){widget.onApplyEffects?.call(List.unmodifiable(_effects));},icon:const Icon(Icons.auto_awesome),tooltip:'Apply effects to main editor'),IconButton(onPressed:_applyCompositeToMainLayer,icon:const Icon(Icons.layers_outlined),tooltip:'Apply current image composite'),IconButton(onPressed:_exportingAnimation?null:_exportRigAnimation,icon:_exportingAnimation?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.movie_creation_outlined),tooltip:'Export rig animation as MP4')]),
+    return Scaffold(backgroundColor:_bg,appBar:AppBar(backgroundColor:_bg,title:const Text('MangaCut',style:TextStyle(fontSize:16,fontWeight:FontWeight.w800)),actions:[IconButton(onPressed:_undoRig,icon:const Icon(Icons.undo_rounded),tooltip:'Undo rig movement',),IconButton(onPressed:_redoRig,icon:const Icon(Icons.redo_rounded),tooltip:'Redo rig movement'),IconButton(onPressed:()=>setState(()=>_canvasZoom=(_canvasZoom-.1).clamp(.5,2.5).toDouble()),icon:const Icon(Icons.zoom_out),tooltip:'Zoom out'),IconButton(onPressed:()=>setState(()=>_canvasZoom=(_canvasZoom+.1).clamp(.5,2.5).toDouble()),icon:const Icon(Icons.zoom_in),tooltip:'Zoom in'),IconButton(onPressed:()=>setState(()=>_canvasZoom=1),icon:const Icon(Icons.center_focus_strong),tooltip:'Reset zoom'),IconButton(onPressed:_resetRigPose,icon:const Icon(Icons.restart_alt),tooltip:'Reset rig pose'),IconButton(onPressed:_save,icon:const Icon(Icons.save_outlined),tooltip:'Save workspace'),IconButton(onPressed:(){widget.onApplyEffects?.call(List.unmodifiable(_effects));},icon:const Icon(Icons.auto_awesome),tooltip:'Apply effects to main editor'),IconButton(onPressed:_applyCompositeToMainLayer,icon:const Icon(Icons.layers_outlined),tooltip:'Apply current image composite'),IconButton(onPressed:_exportingAnimation?null:_exportRigAnimation,icon:_exportingAnimation?const SizedBox(width:18,height:18,child:CircularProgressIndicator(strokeWidth:2)):const Icon(Icons.movie_creation_outlined),tooltip:'Export rig animation as MP4')]),
       body:SafeArea(child:Column(children:[
         _topTabs(),
         Expanded(child:Row(children:[
@@ -506,7 +544,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         if(best>=0)setState(()=>_selectedBone=best);
       }
     },
-    onPanStart:(d){if(_tab==5&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);_activeWeightStroke=[p];}else if(_tab==1||_tab==2){
+    onPanStart:(d){if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){_beginRigGesture();}if(_tab==5&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);_activeWeightStroke=[p];}else if(_tab==1||_tab==2){
       final p=Offset(d.localPosition.dx/c.maxWidth,d.localPosition.dy/c.maxHeight);
       setState((){
         if(_tab==1){_maskStrokes.add([p]);}
@@ -537,7 +575,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         _maskStrokes..clear()..addAll(remaining);
       });
     }else if(_tab==1){setState(()=>_maskStrokes.last.add(p));}else{setState(()=>_liquifyStrokes.last.points.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
-    onPanEnd:(d){if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?-_strength:_strength));_activeWeightStroke.clear();});_save();}},
+    onPanEnd:(d){if(_tab==0)_finishRigGesture();if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?-_strength:_strength));_activeWeightStroke.clear();});_save();}},
     child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
