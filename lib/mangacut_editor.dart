@@ -17,9 +17,11 @@ class MangaCutEditor extends StatefulWidget {
   final String projectId;
   final String projectName;
   final List<String> layerNames;
+  final Map<String,String> layerImagePaths;
+  final String? initialLayerName;
   final ValueChanged<List<MangaCutEffectClip>>? onApplyEffects;
   final void Function(String target,String imagePath)? onApplyImage;
-  const MangaCutEditor({super.key, required this.projectId, required this.projectName, required this.layerNames, this.onApplyEffects, this.onApplyImage});
+  const MangaCutEditor({super.key, required this.projectId, required this.projectName, required this.layerNames, this.layerImagePaths=const {}, this.initialLayerName, this.onApplyEffects, this.onApplyImage});
 
   @override
   State<MangaCutEditor> createState() => _MangaCutEditorState();
@@ -129,9 +131,9 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
   String get _storageKey=>'mangacut.workspace.${widget.projectId}';
 
   @override
-  void initState(){super.initState();_target=widget.layerNames.isEmpty?'Layer 1':widget.layerNames.first;_load();}
+  void initState(){super.initState();_target=widget.initialLayerName??(widget.layerNames.isEmpty?'Layer 1':widget.layerNames.first);_load();}
   Future<void> _load() async {
-    final p=await SharedPreferences.getInstance(); final raw=p.getString(_storageKey); if(raw==null)return;
+    final p=await SharedPreferences.getInstance(); final raw=p.getString(_storageKey); if(raw==null){await _loadProjectLayer(_target);return;}
     try { final j=jsonDecode(raw) as Map<String,dynamic>; if(!mounted)return; setState((){
       _bones..clear()..addAll((j['bones'] as List? ?? []).map((v)=>_RigBone.fromJson(Map<String,dynamic>.from(v))));
       _effects..clear()..addAll((j['effects'] as List? ?? []).map((v)=>MangaCutEffectClip.fromJson(Map<String,dynamic>.from(v))));
@@ -147,9 +149,17 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
         }
       }
       _weightStrokes..clear()..addAll((j['weightStrokes'] as List? ?? []).map((v)=>_WeightStroke.fromJson(Map<String,dynamic>.from(v))));
-    }); if(_sourceImagePath!=null){try{final bytes=await File(_sourceImagePath!).readAsBytes();final decoded=await _decodeImage(bytes);if(mounted)setState(()=>_sourceImage=decoded);}catch(_){}} } catch(_){}
+    }); if(_sourceImagePath==null&&widget.layerImagePaths.containsKey(_target)){_sourceImagePath=widget.layerImagePaths[_target];} if(_sourceImagePath!=null){try{final bytes=await File(_sourceImagePath!).readAsBytes();final decoded=await _decodeImage(bytes);if(mounted){_sourceImage?.dispose();setState(()=>_sourceImage=decoded);}}catch(_){}} } catch(_){}
   }
   Future<ui.Image> _decodeImage(Uint8List bytes) async { final codec=await ui.instantiateImageCodec(bytes); final frame=await codec.getNextFrame(); return frame.image; }
+  Future<void> _loadProjectLayer(String name) async {
+    final path=widget.layerImagePaths[name];
+    if(path==null){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('“$name” is not an image layer. Import a transparent PNG for this part.')));return;}
+    try{final bytes=await File(path).readAsBytes();final decoded=await _decodeImage(bytes);if(!mounted){decoded.dispose();return;}_sourceImage?.dispose();setState((){_target=name;_sourceImage=decoded;_sourceImagePath=path;_maskStrokes.clear();_liquifyStrokes.clear();});await _save();}catch(error){if(mounted)ScaffoldMessenger.of(context).showSnackBar(SnackBar(content:Text('Could not open $name: $error')));}
+  }
+  Future<void> _openProjectLayers() async {
+    await showDialog<void>(context:context,builder:(dialogContext)=>StatefulBuilder(builder:(context,refresh)=>AlertDialog(backgroundColor:_panel,title:const Text('Layers'),content:SizedBox(width:340,child:ListView(shrinkWrap:true,children:[for(final name in widget.layerNames)ListTile(selected:_target==name,leading:Icon(widget.layerImagePaths.containsKey(name)?Icons.image_outlined:Icons.layers_outlined),title:Text(name),subtitle:Text(widget.layerImagePaths.containsKey(name)?'Image layer':'Non-image layer',style:const TextStyle(fontSize:10,color:Colors.white54)),onTap:()async{Navigator.pop(dialogContext);await _loadProjectLayer(name);})])),actions:[TextButton(onPressed:()=>Navigator.pop(dialogContext),child:const Text('Close'))])));
+  }
   Future<void> _pickSourceImage() async { final picked=await ImagePicker().pickImage(source:ImageSource.gallery,imageQuality:95); if(picked==null)return; final docs=await getApplicationDocumentsDirectory(); final ext=picked.path.contains('.')?picked.path.substring(picked.path.lastIndexOf('.')):'.png'; final saved=await File(picked.path).copy('${docs.path}/manga_${widget.projectId}$ext'); final bytes=await saved.readAsBytes(); final decoded=await _decodeImage(bytes); if(!mounted)return; setState((){_sourceImage=decoded;_sourceImagePath=saved.path;_maskStrokes.clear();_liquifyStrokes.clear();}); await _save(); }
   Future<void> _inpaintMaskedArea() async {
     final image=_sourceImage;
@@ -532,6 +542,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       ])));
   }
   Widget _topTabs()=>Container(color:_panel,height:52,child:ListView(scrollDirection:Axis.horizontal,children:[
+    Padding(padding:const EdgeInsets.symmetric(horizontal:4,vertical:6),child:OutlinedButton.icon(onPressed:_openProjectLayers,icon:const Icon(Icons.layers,size:15),label:const Text('Layers'))),
     _tabButton('Rigging',Icons.account_tree,0),_tabButton('Mask',Icons.gesture,1),_tabButton('Liquify',Icons.blur_on,2),_tabButton('Animation',Icons.timeline,3),_tabButton('Effects',Icons.auto_awesome,4),_tabButton('Weights',Icons.brush,5),
   ]));
   Widget _tabButton(String name,IconData icon,int index)=>Padding(padding:const EdgeInsets.symmetric(horizontal:5,vertical:6),child:ChoiceChip(selected:_tab==index,label:Row(mainAxisSize:MainAxisSize.min,children:[Icon(icon,size:16),const SizedBox(width:6),Text(name)]),onSelected:(_)=>setState(()=>_tab=index),selectedColor:_accent,backgroundColor:const Color(0xFF282A34)));
@@ -576,7 +587,7 @@ class _MangaCutEditorState extends State<MangaCutEditor> {
       });
     }else if(_tab==1){setState(()=>_maskStrokes.last.add(p));}else{setState(()=>_liquifyStrokes.last.points.add(p));}_save();}else if(_tab==0&&_selectedBone>=0&&_selectedBone<_bones.length){final p=Offset((d.localPosition.dx/c.maxWidth).clamp(0.0,1.0),(d.localPosition.dy/c.maxHeight).clamp(0.0,1.0));final bone=_bones[_selectedBone];setState((){if(_dragBoneEnd==0){bone.a=p;if(bone.aKeys.containsKey(_time))bone.aKeys[_time]=p;}else{bone.b=p;if(bone.bKeys.containsKey(_time))bone.bKeys[_time]=p;}});_save();}},
     onPanEnd:(d){if(_tab==0)_finishRigGesture();if(_tab==5&&_activeWeightStroke.isNotEmpty&&_selectedBone>=0&&_selectedBone<_bones.length){setState((){_weightStrokes.add(_WeightStroke(_bones[_selectedBone].id,List<Offset>.from(_activeWeightStroke),(_brush/math.max(1.0,math.min(c.maxWidth,c.maxHeight))).clamp(.003,.5).toDouble(),_eraseWeight?-_strength:_strength));_activeWeightStroke.clear();});_save();}},
-    child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects)),
+    child:Transform.scale(scale:_canvasZoom,child:CustomPaint(size:Size.infinite,painter:_RigPainter(_bones,_selectedBone,_maskStrokes,_liquifyStrokes,_weightStrokes,_tab,_brush,_strength,_sourceImage,_time,_duration,_effects))),
   )));
   Widget _timeline()=>Container(height:145,color:_panel,padding:const EdgeInsets.all(10),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
     Row(children:[const Text('TIMELINE',style:TextStyle(fontSize:10,fontWeight:FontWeight.w900,letterSpacing:1)),const Spacer(),Text('${(_time/1000).toStringAsFixed(2)}s',style:const TextStyle(color:Colors.white60,fontSize:11)),IconButton(onPressed:_addKey,icon:const Icon(Icons.add_box_outlined,size:19),tooltip:'Add keyframe'),IconButton(onPressed:_togglePlayback,icon:Icon(_playing?Icons.pause:Icons.play_arrow,size:20))]),
